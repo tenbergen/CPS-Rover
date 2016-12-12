@@ -1,3 +1,0 @@
-import gopigo
-
-gopigo.stop()
