@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+# Author: Andres Ramos
+# !/usr/bin/env python
 # Dexter Industries line sensor python library
 #
 # This is and example to make the GoPiGo follow the line using the Dexter Industries Line follower
