@@ -1,3 +1,5 @@
+#Author: Andres Ramos
+
 import threading
 from navigation_system import *
 from line_detection_system import *
