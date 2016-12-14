@@ -1,1 +1,1 @@
-Run map_system.py to have Plato wait for the map from Kat, and then run it when it is received.
+To start the program, navigate to the directory and run map_system.py. This will make Plato wait for the map from Kat, and then run it when it is received.
