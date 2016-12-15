@@ -1,0 +1,8 @@
+Kitt was made to follow the robot Plato.
+
+To run:
+	- Place 'Kitt' folder onto Kitt
+	- Place Kitt behind Plato at the start of the maze
+	- Run 'Main.py'
+
+Kitt performs best in a lighted area and when there is a white backdrop behind the maze.
