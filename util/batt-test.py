@@ -13,5 +13,6 @@ secs = 0
 
 while True:
     print secs, volt(), enc_read(0), enc_read(1)
+    sys.stdout.flush()
     secs += 10
     time.sleep(10)
