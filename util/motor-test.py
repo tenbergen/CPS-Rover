@@ -2,11 +2,16 @@
 ###########################################################################################
 #This file is part of the CPS-Rover Project of the State University of New York at Oswego.
 #
-#The purpose of robot "PLATO" is to navigate a labyrinth made up of perpendicular "paths,"
-#according to a map that it received. PLATO shall identify intersections and take the
-#corresponding turns outlined in the map.
+#The purpose of this file is to turn on both GoPiGo motors and run them continuously.
+#The script continuously monitors the battery voltage delivered to the motors as well as
+#the elapsed ticks on both encoder wheels.
+#This can be useful to test the speed difference between both motors, since production
+#tolerances in the motors cause them to inevitably go at different speeds, resulting
+#over time in largely unequal distances traveled (and hence the GoPiGo to slightly
+#veer of course). Using this script, these differences can be measured and correlated
+#to the voltage delivered to the motors to establish the change in differences over time.
 #
-#Copyright (c) 2016 Andres Ramos, Keith Martin, Bastian Tenbergen
+#Copyright (c) 2016 Bastian Tenbergen
 #Principle Investigator and Project Lead: Bastian Tenbergen, bastian.tenbergen@oswego.edu
 #
 #License: Creative Commons BY-NC-SA 4.0 https://creativecommons.org/licenses/by-nc-sa/4.0/
@@ -30,15 +35,18 @@
 ###########################################################################################
 
 from gopigo import *
+import sys
+import atexit
 
-def turn_around():
-          enc_tgt(1,1,5)
-          fwd()
-          time.sleep(1)
-          set_speed(100)
-          enc_tgt(1,1,17)
-          right_rot()
-          
-print "battery voltage"
-print volt()
-turn_around()
+atexit.register(stop)
+enable_encoders()
+speed = 200
+set_speed(speed)
+fwd()
+secs = 0
+
+while True:
+    print secs, volt(), enc_read(0), enc_read(1)
+    sys.stdout.flush()
+    secs += 10
+    time.sleep(10)

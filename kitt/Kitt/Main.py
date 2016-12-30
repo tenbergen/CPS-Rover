@@ -1,14 +1,24 @@
-##############################################################################
-#MIT License
+# !/usr/bin/env python
+###########################################################################################
+#This file is part of the CPS-Rover Project of the State University of New York at Oswego.
 #
-#Copyright (c) 2016 Mike Mekker, Justin MacCreery, Ryan Staring
+#The purpose of robot "KITT" is to recognize another Dexter Industries GoPiGo robot
+#using the Raspberry Pi camera and drive towards it. Assuming the other GoPiGo is
+#following a labyrinth made up of perpendicular "paths," the algorithm will
+#look for the other GoPiGo, pay attention to it's movement, and, once the other GoPiGo moved
+#outside of KITT's visual field, drive to the last known position and turn left or right
+#in order to continue following the other robot after that turn.
 #
+#Copyright (c) 2016 Mike Mekker, Justin MacCreery, Ryan Staring, Bastian Tenbergen
+#Principle Investigator and Project Lead: Bastian Tenbergen, bastian.tenbergen@oswego.edu
+#
+#License: Creative Commons BY-NC-SA 4.0 https://creativecommons.org/licenses/by-nc-sa/4.0/
 #Permission is hereby granted, free of charge, to any person obtaining a copy
 #of this software and associated documentation files (the "Software"), to deal
-#in the Software without restriction, including without limitation the rights
-#to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#copies of the Software, and to permit persons to whom the Software is
-#furnished to do so, subject to the following conditions:
+#in the Software without restriction, including the rights to use, copy, modify, merge,
+#publish, and/or distribute copies of the Software for non-commercial purposes,
+#and to permit persons to whom the Software is furnished to do so,
+#subject to the following conditions:
 #
 #The above copyright notice and this permission notice shall be included in all
 #copies or substantial portions of the Software.
@@ -20,7 +30,7 @@
 #LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 #OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #SOFTWARE.
-##############################################################################
+###########################################################################################
 
 from picamera.array import PiRGBArray
 from picamera import PiCamera

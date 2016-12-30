@@ -2,11 +2,10 @@
 ###########################################################################################
 #This file is part of the CPS-Rover Project of the State University of New York at Oswego.
 #
-#The purpose of robot "PLATO" is to navigate a labyrinth made up of perpendicular "paths,"
-#according to a map that it received. PLATO shall identify intersections and take the
-#corresponding turns outlined in the map.
+#The purpose of this file is to stop the GoPiGo's motors. It is to be invoked when the
+#python script that made the robot move crashed and the motors are still running.
 #
-#Copyright (c) 2016 Andres Ramos, Keith Martin, Bastian Tenbergen
+#Copyright (c) 2016 Bastian Tenbergen
 #Principle Investigator and Project Lead: Bastian Tenbergen, bastian.tenbergen@oswego.edu
 #
 #License: Creative Commons BY-NC-SA 4.0 https://creativecommons.org/licenses/by-nc-sa/4.0/
@@ -29,16 +28,5 @@
 #SOFTWARE.
 ###########################################################################################
 
-from gopigo import *
-
-def turn_around():
-          enc_tgt(1,1,5)
-          fwd()
-          time.sleep(1)
-          set_speed(100)
-          enc_tgt(1,1,17)
-          right_rot()
-          
-print "battery voltage"
-print volt()
-turn_around()
+import gopigo
+gopigo.stop()
