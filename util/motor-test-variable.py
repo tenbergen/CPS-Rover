@@ -2,16 +2,17 @@
 ###########################################################################################
 #This file is part of the CPS-Rover Project of the State University of New York at Oswego.
 #
-#The purpose of this file is to turn on both GoPiGo motors and run them continuously.
+#The purpose of this file is to turn on both GoPiGo motors and run them
+#continuously at a random, variable speed.
 #The script continuously monitors the battery voltage delivered to the motors as well as
 #the elapsed ticks on both encoder wheels.
-#This can be useful to test the speed difference between both motors, since production
-#tolerances in the motors cause them to inevitably go at different speeds, resulting
-#over time in largely unequal distances traveled (and hence the GoPiGo to slightly
+#This can be useful to test the speed difference between both motors at different speeds,
+#since production tolerances in the motors cause them to inevitably go at different speeds,
+#resulting over time in largely unequal distances traveled (and hence the GoPiGo to slightly
 #veer of course). Using this script, these differences can be measured and correlated
 #to the voltage delivered to the motors to establish the change in differences over time.
 #
-#Copyright (c) 2016 Bastian Tenbergen
+#Copyright (c) 2017 Bastian Tenbergen
 #Principle Investigator and Project Lead: Bastian Tenbergen, bastian.tenbergen@oswego.edu
 #
 #License: Creative Commons BY-NC-SA 4.0 https://creativecommons.org/licenses/by-nc-sa/4.0/
@@ -35,18 +36,31 @@
 ###########################################################################################
 
 from gopigo import *
+from random import randint
+from math import *
 import sys
 import atexit
 
 atexit.register(stop)
+
+#change the following four, if you want to change the minimum and maximum speed
+# (0 < lowerbound,upperbound <= 255), the time between measurements,
+# of the time between speed changes.
+measure_interval = 10
+change_interval = 60
+lowerbound = 10
+upperbound = 200
+
+speed = randint(lowerbound, upperbound)
 enable_encoders()
-speed = 200
-set_speed(speed)
 fwd()
-secs = 0
+elapsed = 0
 
 while True:
-    print secs, volt(), enc_read(0), enc_read(1)
+    set_speed(speed)
+    print elapsed, volt(), enc_read(0), enc_read(1), speed
     sys.stdout.flush()
-    secs += 10
-    time.sleep(10)
+    elapsed += measure_interval
+    if elapsed % change_interval == 0:
+        speed = randint(lowerbound, upperbound)
+    time.sleep(measure_interval)
