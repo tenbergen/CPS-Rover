@@ -3,7 +3,7 @@
 #This file is part of the CPS-Rover Project of the State University of New York at Oswego.
 #
 #The purpose of this file is to turn on both GoPiGo motors and run them
-#continuously at a random, variable speed.
+#continuously at an increasing (decreasing) speed.
 #The script continuously monitors the battery voltage delivered to the motors as well as
 #the elapsed ticks on both encoder wheels.
 #This can be useful to test the speed difference between both motors at different speeds,
@@ -36,22 +36,22 @@
 ###########################################################################################
 
 from gopigo import *
-from random import randint
 from math import *
 import sys
 import atexit
 
 atexit.register(stop)
 
-#change the following four, if you want to change the minimum and maximum speed
-# (0 < lowerbound,upperbound <= 255), the time between measurements,
-# or the time between speed changes.
+#change the following five, if you want to change the minimum and maximum speed
+# (0 < lowerbound,upperbound <= 255), the rate at which speed is incremented,
+# time between measurements, or the time between speed changes.
 measure_interval = 10
-change_interval = 60
+change_interval = 300
 lowerbound = 10
-upperbound = 200
+upperbound = 250
+increment = 10
 
-speed = randint(lowerbound, upperbound)
+speed = lowerbound
 enable_encoders()
 fwd()
 elapsed = 0
@@ -62,5 +62,5 @@ while True:
     sys.stdout.flush()
     elapsed += measure_interval
     if elapsed % change_interval == 0:
-        speed = randint(lowerbound, upperbound)
+        speed += increment
     time.sleep(measure_interval)
