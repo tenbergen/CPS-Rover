@@ -62,5 +62,6 @@ while True:
     sys.stdout.flush()
     elapsed += measure_interval
     if elapsed % change_interval == 0:
-        speed += increment
+        if speed < upperbound:
+            speed += increment
     time.sleep(measure_interval)
