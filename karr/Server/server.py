@@ -10,43 +10,75 @@ from math import degrees, atan2
 import os
 import select
 
-#Note: when running Karr at 200, the right wheel is slower by a speed of 4.
-
 """""""""""""""""""""""""""""""""
 Creator: Jonathan Baker
 
 Description:
 This program runs on the GoPiGo rover. The program directly controls the rover's movements based on commands
-sent from the controller program. The rover can move forwards, backwards, and pivot and has a working LED light.
+sent from the controller program. The rover can move forwards, backwards, diagonally, and pivot and has a working LED light.
 
+Functionality:
 Every 5 seconds, the rover takes a new GPS coordinate and sends it to the controller.
-Every 0.1 seconds, the rover sends it current speed to the controller to confirm its current speed. If the two speeds are
-different, then the controller will automatically send back the correct speed and the rover will automatically
-travel at the new speed.
+Every 0.1 seconds, the rover sends its current speed to the controller to confirm its current speed. If the two speeds are
+  different, then the controller will automatically send back the correct speed and the rover will automatically
+  travel at the new speed.
 
-TO DO:
-Rover can return home
 """""""""""""""""""""""""""""""""
 
+
+global host
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+host = '192.168.1.106'
+port = 10000
+
+address = (host, port)
+
+sock.bind(address)
+sock.listen(10)
+
+print "Running at", volt(), "volts."
+print "Host:", host
+
+conn, addr = sock.accept()
+print "Connection from ", addr
+
 class Connection(Thread):
+    #receives server commands from controller
+    #populates a server command for Main class to handle
+    
     def __init__(self):
         Thread.__init__(self)
         
     def run(self):
-        global commands
+        global movement_commands
+        global general_commands
         global running
-        commands = Queue.Queue()
+        movement_commands = Queue.Queue()
+        general_commands = Queue.Queue()
         while running:
             r, _, _ = select.select([conn], [], [], 2)
             if r:
                 data = conn.recv(1024).split()
-                commands.put(data)
+                self.fill_movement_list(data)
                 while len(data) > 4:
                     data = data[3:]
                     data[0] = data[0][3:]
-                    commands.put(data)
+                    self.fill_movement_list(data)
+
+    def fill_movement_list (self, data):
+        global movement_commands
+        global general_commands
+        if not data:
+            general_commands.put(None)
+            return
+        if data[0] == "M" or data[0] == "Stop":
+            movement_commands.put(data)
+        else:
+            general_commands.put(data)
 
 class GPS_Coord(Thread):
+    #clears the GPS reading buffer
+    
     def __init__(self):
         Thread.__init__(self)
         global gpsd
@@ -55,14 +87,13 @@ class GPS_Coord(Thread):
     def run(self):
         global gpsd
         global running
-        global coordRunning
         while running:
-            while coordRunning:
-                sleep(3)
             gpsd.next()
 
 
 class GPSServer(Thread):
+    #sends current GPS location to controller every 5 seconds
+    
     def __init__(self):
         Thread.__init__(self)
 
@@ -79,6 +110,8 @@ class GPSServer(Thread):
                 sleep(5)
 
 class SendSpeed(Thread):
+    #sends current running speed to controller every 0.1 seconds
+    
     def __init__(self):
         Thread.__init__(self)
 
@@ -91,28 +124,34 @@ class SendSpeed(Thread):
                 sleep(0.1)
 
 class Main(Thread):
+    #handles all server commands from controller
+    
     def __init__(self):
         Thread.__init__(self)
 
     def run(self):
         global running
-        global commands
+        global movement_commands
+        global general_commands
         global home_coord
         servo_pos = 90
         while running:
-            while commands.empty():
+            while movement_commands.empty() and general_commands.empty():
                 sleep(0.1)
                 if not running:
                     return
-            data = commands.get()
+            if not general_commands.empty():
+                data = general_commands.get()
+            else:
+                data = movement_commands.get()
             if not data:
                 print "Received nothing and quitting"
                 running = False
                 break
             if data[0] == "Stop":
                 if data[2] != 0 and data[3] != 0:
-                    with commands.mutex:
-                        commands.queue.clear()
+                    with movement_commands.mutex:
+                        movement_commands.queue.clear()
                 data = data[1:]
             if data[0] == "Quit":
                 print "Quitting"
@@ -150,9 +189,12 @@ class Main(Thread):
             elif data[0] == "Home":
                 print "Going home"
                 goHome(home_coord)
-                with commands.mutex:
-                    commands.queue.clear()
+                with movement_commands.mutex:
+                    movement_commands.queue.clear()
+                with general_commands.mutex:
+                    general_commands.queue.clear()
 
+#checks if rover is still connected to the network
 def isConnected():
     global host
     try:
@@ -169,40 +211,19 @@ running = True
 global disconnected
 disconnected = False
 
-global speed
 speed = 0
 set_speed(speed)
-global xspeed
 xspeed = 0
-global yspeed
 yspeed = 0
 servo_pos = 90
 servo(servo_pos)
 
-global home_coord
 home_coord = [0,0]
 
 #os.system("sudo gpsd /dev/ttyUSB0 -F /var/run/gpsd.sock")
 gpsd = None
 
-global host
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-host = '192.168.1.101'
-port = 10000
-
-address = (host, port)
-
-sock.bind(address)
-sock.listen(10)
-
-print "Running at", volt(), "volts."
-print "Host:", host
-global addr
-global conn
-
-conn, addr = sock.accept()
-print "Connection from ", addr
-
+#initialize and start threads
 connect = Connection()
 connect.start()
 gps_coord = GPS_Coord()
@@ -222,27 +243,16 @@ try:
                 disconnected = True
                 print "Disconnect detected"
 finally:
-    #print "Trying to disconnect"
     conn.close()
-    running = False
-    #print "Joining Threads"
     sock.close()
-    #print "Socket closed"
-    #if not disconnected:
     connect.join()
-    #print "Connect has terminated"
     gps_coord.join()
     gps.join()
-    #print "GPS has terminated"
     speeder.join()
-    #print "Speeder has terminated"
     commander.join()
-    #print "Commander has terminated"
     stop()
-   # print "Connection closed"
+    
 if disconnected:
     print "Starting to run myself"
-    set_speed(100)
-    fwd()
-    sleep(5)
+    followCoords()
     stop()
