@@ -1,6 +1,6 @@
 from gps import GPS
 from gopigo import *
-set_speed(50)
+set_speed(75)
 coords = GPS(True,True)
 #print coords.rotation
 coords.turn_to_angle(180)
