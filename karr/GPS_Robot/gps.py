@@ -13,6 +13,7 @@ class GPS:
         self.__debug = debug_mode
         self.transform = transform2D
         self.speed = speed
+        set_speed(self.speed)
         #start the hedge
         self.__hedge = MarvelmindHedge(tty = "/dev/ttyACM0", adr=10, debug=False)
         self.__hedge.start()
@@ -36,7 +37,9 @@ class GPS:
         self.transform.position.y = pos[2]
 
     #returns the current distance from the destination    
-    def distance(self,destination):
+    def distance(self,destination,update=False):
+        if update:
+            self.__update_position()
         return self.__distance(self.transform.position,destination)
         
     #Gets the distance between start and end
@@ -55,8 +58,7 @@ class GPS:
     #determine current rotation
     def determine_rotation(self):
         set_speed(100)
-        self.__update_position()
-        start_pos = Vector(self.transform.position)
+
         fwd()
         sleep(1.5)
         stop()
@@ -66,10 +68,13 @@ class GPS:
         bwd()
         sleep(1.5)
         stop()
-
+        sleep(1)
+        self.__update_position()
+        start_pos = Vector(self.transform.position)
         self.transform.rotation = self.get_angle(new_pos,start_pos)
         if self.__debug:
             print "determined Rotation: ",self.transform.rotation
+        set_speed(self.speed)
             
     def stop(self):
         self.__hedge.stop()
@@ -89,18 +94,13 @@ class GPS:
         if self.__debug:
             print "getangle returned: ",rotate
         return rotate
-##        print a.getLength()
-##        print b.getLength()
-##        angle = Vector.angleDeg(a,b)
-##        print "Angle",angle
-##        return angle
-        
+
 
     #travel to a given destination
     def goto_point(self,coord):
-        sleeptick = .1
+        sleeptick = .100
         count = 0
-        distance_threshold = .2
+        distance_threshold = .1
         self.__update_position()
         dst = self.distance(coord)
         if dst <= distance_threshold:
@@ -112,6 +112,7 @@ class GPS:
         fwd()
         sleep(sleeptick)
         while dst >= distance_threshold:
+            sleep(sleeptick)
             self.__update_position()
             olddst = dst
             dst = self.distance(coord)
@@ -123,17 +124,16 @@ class GPS:
                 print "************************"
             if(olddst < dst):
                 count +=1
+            else:
+                count = 0
             if count ==3:
                 stop()
                 self.determine_rotation()
-                self.__set_encoders()
                 self.__update_position()
                 self.turn_to_face(coord)
+                self.__set_encoders()                       
                 fwd()
                 count = 0
-                sleep(sleeptick)
-            else:
-                sleep(sleeptick)
             self.__balance()
         stop()
         self.__update_position()
@@ -142,17 +142,17 @@ class GPS:
     def __turn_left(self,degrees):
         if self.__debug:
             print "turning left."
-        set_speed(75)
-        turn_left_wait_for_completion(degrees)
         set_speed(100)
+        turn_left_wait_for_completion(degrees)
+        set_speed(self.speed)
 
     #rotate right by degrees
     def __turn_right(self,degrees):
         if self.__debug:
             print "turning right."
-        set_speed(75)
-        turn_right_wait_for_completion(degrees)
         set_speed(100)
+        turn_right_wait_for_completion(degrees)
+        set_speed(self.speed)
 
     #turn to a specific angle
     def turn_to_angle(self,angle):
@@ -169,23 +169,28 @@ class GPS:
                 if(difference<=180):
                     if self.__debug:
                         print "difference is less than 180."
-                    self.__turn_left(difference)
+                    self.__turn_left(difference)#was left
                 else:
                     if self.__debug:
                         print "difference is greater than 180."
-                    self.__turn_right(360 - difference)
+                    self.__turn_right(360-difference)
             else:
                 if self.__debug:
-                    print "desintation angle is greater."
+                    print "destintation angle is greater."
                 if(difference<=180):
                     if self.__debug:
                         print "difference is less than 180."
-                    self.__turn_right(difference)
+                    self.__turn_right(difference)#was right
                 else:
                     if self.__debug:
                         print "difference is greater than 180."
-                    self.__turn_left(360 - difference)
+                    self.__turn_left(360-difference)
             self.transform.rotation = angle
+        self.determine_rotation()
+        if self.__debug:
+            print "attenoted deviation:",self.transform.rotation - angle
+        if int(abs(self.transform.rotation - angle)) >5:
+            self.turn_to_angle(angle)
 
     #rotate to face a specific point
     def turn_to_face(self,coord):
@@ -193,7 +198,7 @@ class GPS:
         self.turn_to_angle(angle)
 
     def __balance(self):
-        offset = 25
+        offset = 10
         imbalance = self.__find_imbalance()
         if self.__debug:
             print "imbalance: ",imbalance
@@ -213,10 +218,11 @@ class GPS:
         
         left_dif = left - self.left_enc
         right_dif = right - self.right_enc
-        print left_dif,right_dif
-        if left_dif < right_dif:
+        if self.__debug:
+            print "encoder differences:",left_dif,right_dif
+        if left_dif +5< right_dif:
             return -1
-        elif right_dif < left_dif:
+        elif right_dif +5< left_dif:
             return 1
         else:
             return 0

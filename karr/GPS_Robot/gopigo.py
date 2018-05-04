@@ -237,7 +237,7 @@ DPR = 360.0/64
 # turn x degrees to the right
 def turn_right(degrees):
         
-	pulse = int(degrees//DPR/2)+1
+	pulse = int(degrees//DPR/2)
 	enc_tgt(1,0,pulse)
 	right_rot()
 
@@ -248,7 +248,7 @@ def turn_right_wait_for_completion(degrees):
 	#speed = read_motor_speed()
 	#set_speed(50)
 	turn_right(degrees)
-	pulse = int(degrees//DPR/2)+ 1
+	pulse = int(degrees//DPR/2)
 	while enc_read(0) < pulse:
 		pass
 	#set_speed(speed)
@@ -521,7 +521,7 @@ def enc_tgt(m1,m2,target):
 #	return:		distance in cm
 def enc_read(motor):
 	write_i2c_block(address,enc_read_cmd+[motor,0,0])
-	time.sleep(.08)
+	time.sleep(.008)
 	try:
 		b1=bus.read_byte(address)
 		b2=bus.read_byte(address)
