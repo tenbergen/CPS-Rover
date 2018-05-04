@@ -237,7 +237,7 @@ DPR = 360.0/64
 # turn x degrees to the right
 def turn_right(degrees):
         
-	pulse = int(degrees//DPR/2)-1
+	pulse = int(degrees//DPR/2)+1
 	enc_tgt(1,0,pulse)
 	right_rot()
 
@@ -248,7 +248,7 @@ def turn_right_wait_for_completion(degrees):
 	#speed = read_motor_speed()
 	#set_speed(50)
 	turn_right(degrees)
-	pulse = int(degrees//DPR/2)- 1
+	pulse = int(degrees//DPR/2)+ 1
 	while enc_read(0) < pulse:
 		pass
 	#set_speed(speed)
