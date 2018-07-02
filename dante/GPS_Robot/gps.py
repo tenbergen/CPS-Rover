@@ -11,6 +11,7 @@ class GPS:
     #initialize the class
     def __init__(self,perform_warmup,gopigo,speed=300,debug_mode=False,transform2D=Transform()):
         #initialize the required components
+        self.imu = None
         self.gpg = gopigo
         self.__debug = debug_mode
         self.transform = transform2D
@@ -199,8 +200,16 @@ class GPS:
     #turn to a specific angle
     def turn_to_angle(self,angle):
         
-        self.determine_rotation()
-        
+        #self.determine_rotation()
+        if self.imu != None:
+            sleep(1)
+            x,y,z = self.imu.read_euler()
+            while (x >360 or x <-360) or (y >360 or y <-360) or (z >360 or z <-360):
+                x,y,z = self.imu.read_euler()
+                sleep(.1)
+                print "X:",x,y,z
+            print x,y,z
+            self.transform.rotation = x
         difference = abs(self.transform.rotation - angle)
         if self.__debug:
             print "current rotation: ",self.transform.rotation
@@ -208,7 +217,7 @@ class GPS:
             print "rotation needed: ",difference
         
         if difference > 5:
-            self.gpg.set_speed(150)
+            self.gpg.set_speed(100)
             if self.transform.rotation > angle:
                 if self.__debug:
                     print "current angle is greater."
@@ -233,13 +242,20 @@ class GPS:
                     self.__turn_left(360-difference)
             self.transform.rotation = angle
             self.gpg.set_speed(self.speed)
-            self.determine_rotation()
-        
+            #self.determine_rotation()
+        if self.imu != None:
+            sleep(1)
+            x,y,z = self.imu.read_euler()
+            while x >360 or x <-360:
+                x,y,z = self.imu.read_euler()
+                sleep(.1)
+            self.transform.rotation = x
         difference = abs(self.transform.rotation - angle)
         if self.__debug:
             print "post adjustment deviation:",self.transform.rotation - angle
-        #if difference >5:
-            #self.turn_to_angle(angle)
+        if difference >5:
+            sleep(10)
+            self.turn_to_angle(angle)
         
     #rotate to face a specific point
     def turn_to_face(self,coord):
