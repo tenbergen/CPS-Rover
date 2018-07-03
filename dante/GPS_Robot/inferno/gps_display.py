@@ -2,7 +2,11 @@ import sys
 from PyQt5.QtWidgets import QApplication,QMainWindow,QPushButton,QGroupBox,QGridLayout,QHBoxLayout,QVBoxLayout,QRadioButton
 from PyQt5.QtCore import Qt,QRect
 from grid import *
-
+from gps import *
+import time
+from vector import *
+from advancedgopigo3 import *
+from queue import Queue
 #Mouse states
 MOUSE_MODE = 1
 ADD_OBSTACLE = 1
@@ -46,8 +50,15 @@ class App(QMainWindow):
         self.border_thickness = 2
         self.use_diagonals = True
         self.grid = Grid(self.grid_width,self.grid_height ,self.grid_x,self.grid_y,self.offset_x,self.offset_y,self.border_thickness,self.use_diagonals)
-
+        self.queue = Queue()
+        self.gps = GPS(self.queue,True,AdvancedGoPiGo3(25),debug_mode=True)
+        
         self.init_ui()
+        time.sleep(1)
+        self.gps.set_position_callback(self.grid_panel.rover_pos_changed)
+        self.gps.set_reached_point_callback(self.on_point_reached)
+        self.gps.start()
+        #self.gps.run()
 
     #actually builds the GUI
     def init_ui(self):
@@ -64,7 +75,7 @@ class App(QMainWindow):
 
         #set up for mouse actions
         self.mouse_layout.setTitle("On Click")
-        self.mouse_layout.resize(300,100)
+        self.mouse_layout.resize(350,100)
         self.mouse_layout.move(600,50)
 
         #layout for mouse actions
@@ -98,7 +109,7 @@ class App(QMainWindow):
         gridl.addWidget(self.add_destination_button,0,1)
         gridl.addWidget(self.remove_destination_button,1,1)
         self.mouse_layout.setLayout(gridl)
-
+        
         # save and load buttons
         self.save_button = QPushButton(self)
         self.load_button = QPushButton(self)
@@ -108,6 +119,14 @@ class App(QMainWindow):
         self.save_load_layout.addWidget(self.save_button)
         self.save_load_layout.addWidget(self.load_button)
         self.button_panel.addLayout(self.save_load_layout)
+        
+        #Start/Stop Button
+        self.start_stop_button = QPushButton(self)
+        self.start_stop_button.setText("Start")
+        self.start_stop_button.clicked.connect(self.on_start_stop_clicked)
+        self.button_panel.addWidget(self.start_stop_button)
+        
+        #move to position!
         self.button_panel.setGeometry(QRect(600, 150, 300, 100))
         self.show()
 
@@ -119,6 +138,38 @@ class App(QMainWindow):
         self.setPalette(p)
     def get_mouse_mode(self):
         return self.MOUSE_MODE
+    
+    def on_start_stop_clicked(self):
+        button = self.start_stop_button
+        if button.text() == "Start":
+            if len(self.grid_panel.current_path)>0:
+                destination = self.grid.get_global_coord_from_node(self.grid_panel.current_path.pop(0))
+                print(self.grid_panel.current_path[0].gridPos.x)
+                print(self.grid_panel.current_path[0].gridPos.y)
+                self.queue.put(True)
+                self.queue.put(destination)
+                button.setText("Stop")
+        else:
+            button.setText("Start")
+            self.queue.queue.clear()
+            self.queue.put(False)
+            
+    def on_point_reached(self):
+        print("callback")
+        self.grid_panel.find_path()
+        self.send_point_to_gps()
+        if len(self.grid_panel.current_path) == 0:
+            self.start_stop_button.setText("Start")
+            self.queue.put(False)
+        
+    def send_point_to_gps(self):
+         if len(self.grid_panel.current_path)>0:
+             node = self.grid_panel.current_path.pop(0)
+             if node == self.grid_panel.rover_position:
+                 node = self.grid_panel.current_path.pop(0)
+             destination = self.grid.get_global_coord_from_node(node)
+             self.queue.put(destination)
+
 
 
 class GridPanel(QGroupBox):
@@ -165,45 +216,13 @@ class GridPanel(QGroupBox):
             print(int(MOUSE_MODE).__str__())
             #global ADD_OBSTACLE
             if MOUSE_MODE == ADD_OBSTACLE:
-                if node.node_type != 1 or button.current_color != DESTINATION or button.current_color != ROVER:
-                    something_happened = True
-                    node.node_type = 1
-                    button.default_color = OBSTACLE
-                    button.current_color = OBSTACLE
-                    button.set_color(OBSTACLE)
-                    grid.all_obstacles.add(node)
-                    border = grid.spread_border(node,grid.border_thickness,grid.include_diagonals)
-                    #TODO if a path was interrupted call event to recalculate path
-                    if self.current_destination is not None:
-                        if border.__contains__(self.current_destination):
-                            self.current_destination = None
-                            self.current_path = []
-                        elif not set(self.current_path).isdisjoint(border):
-                            self.find_path()
+                something_happened = self.on_obstacle_added(node)
             elif MOUSE_MODE == REMOVE_OBSTACLE:
-                if node.node_type ==1:
-                    something_happened = True
-                    node.node_type = 0
-                    self.grid.all_obstacles.remove(node)
-                    button.default_color = OPEN_SPACE
-                    button.current_color = OPEN_SPACE
-                    button.set_color(OPEN_SPACE)
-                    self.grid.remake_borders()
-                    self.find_path()
-
+                something_happened = self.on_obstacle_removed(node)
             elif MOUSE_MODE == ADD_DESTINATION:
-                if node.node_type == 0 and node != self.rover_position:
-                    something_happened = True
-                    self.current_destination = node
-                    button.current_color = DESTINATION
-                    button.set_color(DESTINATION)
-                    self.find_path()
-
+                something_happened = self.on_destination_added(node)
             elif MOUSE_MODE == REMOVE_DESTINATION:
-                if self.current_destination is not None and node == self.current_destination:
-                    something_happened = True
-                    self.current_destination = None
-                    self.current_path = []
+                something_happened = self.on_destination_removed(node)
 
             if something_happened:
                 self.redraw_grid()
@@ -233,14 +252,20 @@ class GridPanel(QGroupBox):
             self.current_path = self.grid.find_path(self.rover_position,self.current_destination)
 
     def rover_pos_changed(self,position):
-        if position.x >= 0 and position.y > 0 and position.x <= 2.5 and position.y <= 3.5:
-            node = self.grid.node_from_global_coord(position)
-
-            if node != self.rover_position:
-                self.rover_position = node
-                self.redraw_grid()
+        #print("position callback")
+        #if statement limiting area to the valid grid goes here
+        node = self.grid.node_from_global_coord(position)
+        if node != self.rover_position:
+            self.rover_position = node
+            if self.current_destination is not None and node == self.current_destination:
+                self.current_destination = None
+                self.current_path = []
+            else:
+                self.find_path()
+            self.redraw_grid()
 
     def on_path_changed(self):
+        #TODO include callback event to rover
         if self.current_path is not None and len(self.current_path) > 0:
             self.current_path.pop(0)
             self.redraw_grid()
@@ -248,16 +273,50 @@ class GridPanel(QGroupBox):
     def on_obstacle_found(self,position):
         if position.x >= 0 and position.y > 0 and position.x <= 2.5 and position.y <= 3.5:
             node = self.grid.node_from_global_coord(position)
+            if self.on_obstacle_added(node):
+                self.redraw_grid()
+            
+
+    def on_obstacle_added(self,node):
+        if node.node_type != 1 and node != self.rover_position:
             node.node_type = 1
+
             self.grid.all_obstacles.add(node)
-            border = self.grid.spread_border(node, self.grid.border_thickness, self.grid.include_diagonals)
-            # TODO if a path was interrupted call event to recalculate path
+            border = self.grid.spread_border(node,self.grid.border_thickness,self.grid.include_diagonals)
+
             if self.current_destination is not None:
                 if border.__contains__(self.current_destination):
                     self.current_destination = None
                     self.current_path = []
                 elif not set(self.current_path).isdisjoint(border):
                     self.find_path()
+            return True
+        return False
+    
+    def on_obstacle_removed(self,node):
+        if node.node_type ==1:
+            node.node_type = 0
+            self.grid.all_obstacles.remove(node)
+            self.grid.remake_borders()
+            self.find_path()
+            return True
+        return False
+    
+    def on_destination_added(self,node):
+        if node.node_type == 0 and node != self.rover_position:
+            self.current_destination = node
+            self.find_path()
+            return True
+        return False
+    
+    def on_destination_removed(self,node):
+        if self.current_destination is not None and node == self.current_destination:
+            self.current_destination = None
+            self.current_path = []
+            return True
+        return False
+
+        
 class GridButton(QPushButton):
     def __init__(self,parent,node):
         super().__init__(parent)

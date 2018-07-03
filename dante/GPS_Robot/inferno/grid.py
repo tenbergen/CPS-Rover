@@ -1,4 +1,4 @@
-from Vector import *
+from vector import *
 import heapq
 OPEN_SPACE = 0
 OBSTACLE = 1
@@ -67,12 +67,16 @@ class Grid:
     def node_from_global_coord(self,coords):
         # TODO add methods for insuring coord exists.
         # noinspection PyBroadException
-        try:
-            temp = self.nodes[coords.x - self.__world_bottom_left.x,coords.y - self.__world_bottom_left.y]
-            return temp
-        except:
-            print("error")
-
+        coords.x = int((coords.x - self.__world_bottom_left.x)/ self.node_length_x)
+        coords.y = int((coords.y - self.__world_bottom_left.y)/ self.node_length_y)
+        if coords.x >= 0 and coords.x <= self.nodes_in_x and coords.y >= 0 and coords.y <= self.nodes_in_y:
+            temp = self.nodes[coords.x][coords.y]
+        else:
+            temp = self.nodes[0][0]
+        return temp
+    def get_global_coord_from_node(self,node):
+        return Vector(((node.gridPos.x + self.__world_bottom_left.x) * self.node_length_x) + (.5 * self.node_length_x),\
+                      ((node.gridPos.y + self.__world_bottom_left.y) * self.node_length_y) + (.5 * self.node_length_y))
     def get_neighbors(self,node,recurse=0,diagonals=True):
         neighbors = set()
         new_neighbors = set()
@@ -124,7 +128,7 @@ class Grid:
         try:
             if start == end:
                 return []
-            elif start.node_type != OPEN_SPACE or end.node_type != OPEN_SPACE:
+            elif end.node_type != OPEN_SPACE:
                 return []
 
             open_set = [] #needs to be priority queue
@@ -176,7 +180,8 @@ class Grid:
         while current_node != start:
             path.append(current_node)
             current_node = current_node.parent
-        path.__reversed__()
+        #path.remove(start)
+        path.reverse()
         return path
 
 
