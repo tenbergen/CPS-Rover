@@ -1,6 +1,7 @@
 import sys
-from PyQt5.QtWidgets import QApplication,QMainWindow,QPushButton,QGroupBox,QGridLayout,QHBoxLayout,QVBoxLayout,QRadioButton
+from PyQt5.QtWidgets import QApplication,QMainWindow,QPushButton,QGroupBox,QGridLayout,QHBoxLayout,QVBoxLayout,QRadioButton,QInputDialog,QLineEdit,QFileDialog
 from PyQt5.QtCore import Qt,QRect
+from PyQt5.QtGui import QIcon
 from grid import *
 from gps import *
 import time
@@ -114,7 +115,9 @@ class App(QMainWindow):
         self.save_button = QPushButton(self)
         self.load_button = QPushButton(self)
         self.save_button.setText("Save")
+        self.save_button.clicked.connect(self.save)
         self.load_button.setText("Load")
+        self.load_button.clicked.connect(self.load)
         self.save_load_layout = QHBoxLayout()
         self.save_load_layout.addWidget(self.save_button)
         self.save_load_layout.addWidget(self.load_button)
@@ -170,6 +173,25 @@ class App(QMainWindow):
              destination = self.grid.get_global_coord_from_node(node)
              self.queue.put(destination)
 
+    def save(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        fileName, _ = QFileDialog.getSaveFileName(self,"Save Grid","","All Files (*);;Text Files (*.txt)", options=options)
+        if fileName:
+            print(fileName)
+        realfilename = "your grid.grid"
+        self.grid.save(realfilename)
+
+    def load(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        fileName, _ = QFileDialog.getOpenFileName(self,"Load Grid", "","All Files (*);;Python Files (*.py)", options=options)
+        self.grid = Grid.load(fileName)
+        self.grid_panel.setParent(None)
+        self.grid_panel = None
+        self.grid_panel = GridPanel(self,self.grid)
+        self.grid_panel.show()
+
 
 
 class GridPanel(QGroupBox):
@@ -184,7 +206,7 @@ class GridPanel(QGroupBox):
         layout = QGridLayout(self)
         layout.setHorizontalSpacing(0)
         layout.setVerticalSpacing(0)
-        for i in range (0,self.grid.nodes_in_x):   #this will eventually be dependent on the grid.
+        for i in range (0,self.grid.nodes_in_x):   
             for j in range(0,self.grid.nodes_in_y):
                 temp = GridButton(self,self.grid.get_node(i,j))
                 temp.x = j

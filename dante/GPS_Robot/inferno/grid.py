@@ -184,8 +184,48 @@ class Grid:
         path.reverse()
         return path
 
+    def save(self, filename, return_as_string=False):
+        try:
+            file = open(filename,'w')
+            temp = ""+self.grid_size_x.__str__() +"\n" + self.grid_size_y.__str__() +"\n"
+            temp +=   self.nodes_in_x.__str__() + "\n" + self.nodes_in_y.__str__() + "\n"
+            temp +=   self.__world_bottom_left.x.__str__() + "\n" + self.__world_bottom_left.y.__str__() + "\n"
+            temp +=   self.border_thickness.__str__() + "\n" + self.include_diagonals.__str__()
+            
+            for x in range(0,self.nodes_in_x):
+                for y in range(0,self.nodes_in_y):
+                    temp += "\n" + self.nodes[x][y].node_type.__str__()
 
+            
+            file.write(temp)
+            
+        except Exception as ex:
+            print(ex)
+        finally:
+            file.close()
+    @staticmethod
+    def load(filename):
+        try:
+            file = open(filename,'r')
+            data = file.readlines()
+            size_x = float(data.pop(0))
+            size_y = float(data.pop(0))
+            nodes_x = int(data.pop(0))
+            nodes_y = int(data.pop(0))
+            world_x = float(data.pop(0))
+            world_y = int(data.pop(0))
+            thickeness = int(data.pop(0))
+            diagonals = bool(data.pop(0))
+            grid = Grid(size_x,size_y,nodes_x,nodes_y,world_x,world_y,thickeness,diagonals)
+            for x in range(0,nodes_x):
+                for y in range(0,nodes_y):
+                    grid.get_node(x,y).node_type = int(data.pop(0))
 
+        except Exception as ex:
+            print(ex)
+        finally:
+            file.close()
+        return grid
 class Node:
     def __init__(self,x,y,node_type):
         self.gridPos = Vector(x,y)
