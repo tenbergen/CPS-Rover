@@ -8,6 +8,7 @@ import time
 from vector import *
 from advancedgopigo3 import *
 from queue import Queue
+from server import Server
 #Mouse states
 MOUSE_MODE = 1
 ADD_OBSTACLE = 1
@@ -38,6 +39,7 @@ def btnstate(button):
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
+        #initialize default values
         self.title = "GPS Robot-Inferno"
         self.left = 10
         self.top = 100
@@ -53,15 +55,24 @@ class App(QMainWindow):
         self.use_diagonals = True
         self.grid = Grid(self.grid_width,self.grid_height ,self.grid_x,self.grid_y,self.offset_x,self.offset_y,self.border_thickness,self.use_diagonals)
         self.queue = Queue()
-        self.gps = GPS(self.queue,True,AdvancedGoPiGo3(25),debug_mode=True)
+        gpg = AdvancedGoPiGo3(25)
+        self.gps = GPS(self.queue,True,gpg,debug_mode=True)
+        self.server = Server(gpg,"dante.local",10000)
         self.rover_position = self.grid.get_node(0,0)
         self.current_destination = None
         self.home = self.grid.get_node(1,1)
         self.current_path = []
+
+        #create the actual GUI
         self.init_ui()
+
+        #prep and run threads
         self.gps.set_position_callback(self.rover_pos_changed)
         self.gps.set_reached_point_callback(self.on_point_reached)
         self.gps.start()
+        
+        self.server.start()
+        self.server.can_run(False)
 
     #actually builds the GUI
     def init_ui(self):
@@ -139,7 +150,7 @@ class App(QMainWindow):
 
         #autodrive Button
         self.autodrive_button = QPushButton(self)
-        self.autodrive_button.setText("Switch to Manual")
+        self.autodrive_button.setText("Switch To Manual")
         self.autodrive_button.clicked.connect(self.on_autodrive_clicked)
         self.button_panel.addWidget(self.autodrive_button)
 
@@ -269,23 +280,26 @@ class App(QMainWindow):
         button = self.autodrive_button
         if button.text() == "Switch To Manual":
             button.setText("Switch To Automatic")
+            self.server.can_run(True)
             self.start_stop_button.hide()
         else:
             button.setText("Switch To Manual")
             if self.start_stop_button.text() == "Stop":
                 on_start_stop_clicked()
+            self.server.can_run(False)
             self.start_stop_button.show()
             
     def on_go_home_clicked(self):
-        self.current_destination = self.home
-        go_button = self.start_stop_button
-        auto_button = self.autodrive_button
-        if auto_button.text() == "Switch To Automatic":
-            on_autodrive_clicked()
-        if go_button.text() == "Start":
-            on_start_stop_clicked()
-        self.find_path()
-        self.grid_panel.redraw_grid()
+        if self.home is not None:
+            self.current_destination = self.home
+            go_button = self.start_stop_button
+            auto_button = self.autodrive_button
+            if auto_button.text() == "Switch To Automatic":
+                on_autodrive_clicked()
+            if go_button.text() == "Start":
+                on_start_stop_clicked()
+            self.find_path()
+            self.grid_panel.redraw_grid()
         
     def on_point_reached(self):
         print("callback")

@@ -54,12 +54,20 @@ class AdvancedGoPiGo3():
 
     def __init__(self, angle_compensation = 0,use_mutex = False):
         self.gpg = easygopigo3.EasyGoPiGo3(use_mutex)
-
+        self.speed = self.gpg.get_speed()
         self.angle_compensation = angle_compensation #this corrects for the ability to rotate one full circle.
 
 
     def rotate_left(self,degrees):
         self.gpg.turn_degrees(abs(self.__rotation_compensation(degrees)))
+
+    def rotate_right_forever(self):
+        self.gpg.set_motor_dps(self.gpg.MOTOR_LEFT, -self.speed/2)
+        self.gpg.set_motor_dps(self.gpg.MOTOR_RIGHT, self.speed/2)
+
+    def rotate_left_forever(self):
+        self.gpg.set_motor_dps(self.gpg.MOTOR_LEFT, self.speed/2)
+        self.gpg.set_motor_dps(self.gpg.MOTOR_RIGHT, -self.speed/2)
 
     def rotate_right(self,degrees):
         self.gpg.turn_degrees(-abs(self.__rotation_compensation(degrees)))
@@ -68,15 +76,15 @@ class AdvancedGoPiGo3():
         return degrees + (degrees * (self.angle_compensation/360))
 
     def set_left_wheel(self,speed):
-        self.gpg.set_motor_limits(self.MOTOR_LEFT, dps=speed)
+        self.gpg.set_motor_limits(self.gpg.MOTOR_LEFT, dps=speed)
 
     def set_right_wheel(self,speed):
-        self.gpg.set_motor_limits(self.MOTOR_RIGHT, dps=speed)
+        self.gpg.set_motor_limits(self.gpg.MOTOR_RIGHT, dps=speed)
 
     def forward(self):
         self.gpg.forward()
-    def backward():
-        self.gpg.backward(self)
+    def backward(self):
+        self.gpg.backward()
     def stop(self):
         self.gpg.stop()
     def drive_cm(self,distance):
@@ -84,4 +92,13 @@ class AdvancedGoPiGo3():
     def set_speed(self,speed):
         self.gpg.set_speed(speed)
 
-    
+    def led_on(self,id):
+        self.gpg.led_on(id)
+    def led_off(self,id):
+        self.gpg.led_off(id)
+    def open_eyes(self):
+        self.gpg.open_eyes()
+    def close_eyes(self):
+        self.gpg.close_eyes()
+    def volt(self):
+        return self.gpg.volt()
