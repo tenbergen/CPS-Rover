@@ -67,10 +67,10 @@ class Grid:
     def node_from_global_coord(self,coords):
         # TODO add methods for insuring coord exists.
         # noinspection PyBroadException
-        coords.x = int((coords.x - self.__world_bottom_left.x)/ self.node_length_x)
-        coords.y = int((coords.y - self.__world_bottom_left.y)/ self.node_length_y)
+        x = int((coords.x - self.__world_bottom_left.x)/ self.node_length_x)
+        y = int((coords.y - self.__world_bottom_left.y)/ self.node_length_y)
         if coords.x >= 0 and coords.x <= self.nodes_in_x and coords.y >= 0 and coords.y <= self.nodes_in_y:
-            temp = self.nodes[coords.x][coords.y]
+            temp = self.nodes[x][y]
         else:
             temp = self.nodes[0][0]
         return temp
@@ -125,19 +125,24 @@ class Grid:
         return neighbors
 
     def find_path(self,start,end):
+        path = []
+        simple_path = []
+
+        if end is None or start is None:
+            return [],[]
+        elif start == end:
+            return [],[]
+        elif end.node_type != OPEN_SPACE:
+            return [],[]
+        
+
+        open_set = [] 
+        closed_set = set()
+        current_node = start
+        path_success = False
+
+        open_set.append(start)
         try:
-            if start == end:
-                return []
-            elif end.node_type != OPEN_SPACE:
-                return []
-
-            open_set = [] #needs to be priority queue
-            closed_set = set()
-            current_node = start
-            path_success = False
-            path = []
-            open_set.append(start)
-
             while len(open_set) > 0 and current_node != end:
                 current_node = heapq.heappop(open_set)
                 closed_set.add(current_node)
@@ -160,10 +165,28 @@ class Grid:
 
                 if path_success:
                     path = self.__trace_path(start,end)
+                    simple_path = self.__simplify_path(path)
                     break
         except Exception as ex:
             print(ex)
-        return path
+        #print(path,len(path))
+        #print(simple_path,len(simple_path))
+        return path,simple_path
+
+    def __simplify_path(self,path):
+        old_dir = Vector(0,0)
+        simple_path = []
+
+        for i in range(1,len(path)):
+            new_dir = Vector(path[i-1].gridPos.x-path[i].gridPos.x,path[i-1].gridPos.y-path[i].gridPos.y)
+            #print(new_dir != old_dir)
+            if new_dir != old_dir:
+                simple_path.append(path[i])
+            #print(old_dir)
+            #print(new_dir)
+            old_dir = new_dir
+        simple_path.append(path[-1])
+        return simple_path
 
     def __get_distance(self,a,b):
         dst_x = abs(a.gridPos.x - b.gridPos.x)
