@@ -51,31 +51,34 @@ class App(QMainWindow):
         self.grid_y = 28
         self.offset_x = 0
         self.offset_y = 0
-        self.border_thickness = 2
+        self.border_thickness = 1
         self.use_diagonals = True
         self.grid = Grid(self.grid_width,self.grid_height ,self.grid_x,self.grid_y,self.offset_x,self.offset_y,self.border_thickness,self.use_diagonals)
         self.queue = Queue()
         gpg = AdvancedGoPiGo3(25)
-        self.gps = GPS(self.queue,True,gpg,debug_mode=True)
-        self.server = Server(gpg,"dante.local",10000)
+        self.gps = GPS(self.queue,True,gpg,debug_mode=False)
+        #self.server = Server(gpg,"dante.local",10000)
         self.rover_position = self.grid.get_node(0,0)
         self.current_destination = None
         self.home = self.grid.get_node(1,1)
         self.current_path = []
+        self.simple_path = []
 
         #create the actual GUI
-        self.init_ui()
+        self.initUI()
 
         #prep and run threads
         self.gps.set_position_callback(self.rover_pos_changed)
         self.gps.set_reached_point_callback(self.on_point_reached)
+        self.gps.set_obstacle_callback(self.on_obstacle_found)
+        self.gps.minimum_distance = 45
         self.gps.start()
         
-        self.server.start()
-        self.server.can_run(False)
+        #self.server.start()
+        #self.server.can_run(False)
 
     #actually builds the GUI
-    def init_ui(self):
+    def initUI(self):
 
         #base effects
         self.setWindowTitle(self.title)
@@ -170,14 +173,22 @@ class App(QMainWindow):
         self.button_panel.setGeometry(QRect(600, 150, 300, 200))
         self.show()
 
-
+    def closeEvent(self,event):
+        print("program closing")
+        self.gps.cancel_early = True
+        self.gps.thread_done = True
+        self.gps.join()
+        #self.serve.join(.1)
+        self.gps.gpg.stop()
 
     def set_color(self,color):
         p = self.palette()
         p.setColor(self.backgroundRole(),color)
         self.setPalette(p)
+        
     def get_mouse_mode(self):
         return self.MOUSE_MODE
+    
     def on_click_event(self,vector,button,grd):
         grid = self.grid
         def click_event():
@@ -207,22 +218,25 @@ class App(QMainWindow):
         return click_event
     
     def on_obstacle_added(self,node):
-        try:
-            if node.node_type != 1 and node != self.rover_position:
-                node.node_type = 1
+        if node.node_type != 1 and node != self.rover_position:
+            node.node_type = 1
 
-                self.grid.all_obstacles.add(node)
-                border = self.grid.spread_border(node,self.grid.border_thickness,self.grid.include_diagonals)
+            self.grid.all_obstacles.add(node)
+            border = self.grid.spread_border(node,self.grid.border_thickness,self.grid.include_diagonals)
 
-                if self.current_destination is not None:
-                    if border.__contains__(self.current_destination):
-                        self.current_destination = None
-                        self.current_path = []
-                    elif not set(self.current_path).isdisjoint(border):
-                        self.find_path()
-                return True
-        except Exception as ex:
-            print(ex)
+            if self.current_destination is not None:
+                if border.__contains__(self.current_destination):
+                    self.current_destination = None
+                    self.current_path = []
+                    self.simple_path = []
+                self.find_path()
+                self.gps.cancel_early = True
+                if not set(self.current_path).isdisjoint(border):
+                    if len(self.current_path)>0:
+                        destination = self.grid.get_global_coord_from_node(self.current_path.pop(0))
+                        self.queue.put(True)
+                        self.queue.put(destination)
+            return True
         return False
     
     
@@ -251,10 +265,8 @@ class App(QMainWindow):
     def on_start_stop_clicked(self):
         button = self.start_stop_button
         if button.text() == "Start":
-            if len(self.grid_panel.current_path)>0:
-                destination = self.grid.get_global_coord_from_node(self.grid_panel.current_path.pop(0))
-                print(self.grid_panel.current_path[0].gridPos.x)
-                print(self.grid_panel.current_path[0].gridPos.y)
+            if len(self.current_path)>0:
+                destination = self.grid.get_global_coord_from_node(self.current_path.pop(0))
                 self.queue.put(True)
                 self.queue.put(destination)
                 button.setText("Stop")
@@ -262,6 +274,7 @@ class App(QMainWindow):
             button.setText("Start")
             self.queue.queue.clear()
             self.queue.put(False)
+            self.gps.cancel_early = True
             
     def on_cam_on_off_clicked(self):
         button = self.cam_on_button
@@ -280,35 +293,54 @@ class App(QMainWindow):
         button = self.autodrive_button
         if button.text() == "Switch To Manual":
             button.setText("Switch To Automatic")
-            self.server.can_run(True)
+            #self.server.can_run(True)
             self.start_stop_button.hide()
         else:
             button.setText("Switch To Manual")
             if self.start_stop_button.text() == "Stop":
                 on_start_stop_clicked()
-            self.server.can_run(False)
+            #self.server.can_run(False)
             self.start_stop_button.show()
             
     def on_go_home_clicked(self):
-        if self.home is not None:
-            self.current_destination = self.home
-            go_button = self.start_stop_button
-            auto_button = self.autodrive_button
-            if auto_button.text() == "Switch To Automatic":
-                on_autodrive_clicked()
-            if go_button.text() == "Start":
-                on_start_stop_clicked()
-            self.find_path()
-            self.grid_panel.redraw_grid()
+        try:
+            if self.home is not None:
+                self.current_destination = self.home
+                self.find_path()
+                go_button = self.start_stop_button
+                auto_button = self.autodrive_button
+                if auto_button.text() == "Switch To Automatic":
+                    self.on_autodrive_clicked()
+                if go_button.text() == "Start":
+                    self.on_start_stop_clicked()
+                self.grid_panel.redraw_grid()
+        except Exception as ex:
+            print(ex)
         
-    def on_point_reached(self):
+    def on_point_reached(self,pos):
         print("callback")
-        self.grid_panel.find_path()
+        #self.find_path()
         self.send_point_to_gps()
-        if len(self.grid_panel.current_path) == 0:
+        if len(self.current_path) == 0:
             self.start_stop_button.setText("Start")
             self.queue.put(False)
             
+    def on_obstacle_found(self,position):
+        #print("callback-obstacle")
+        #print(position.x,position.y)
+        
+        if position.x > 0 and position.y > 0 and position.x <= 2.5 and position.y <= 3.5:
+            node = self.grid.node_from_global_coord(position)
+            
+            if self.on_obstacle_added(node):
+                #print(position.x,position.y)
+                print(self.gps.transform.position)
+                print(self.gps.transform.rotation)
+                print(self.gps.distance_sensor.read())
+                print(position)
+                self.grid_panel.redraw_grid()
+                #print(node.gridPos.x,node.gridPos.y)
+                
     def rover_pos_changed(self,position):
         #TODO if statement limiting area to the valid grid goes here
         node = self.grid.node_from_global_coord(position)
@@ -317,21 +349,23 @@ class App(QMainWindow):
             if self.current_destination is not None and node == self.current_destination:
                 self.current_destination = None
                 self.current_path = []
-            else:
-                self.grid_panel.find_path()
-            self.redraw_grid()
+            #else:
+                #self.find_path()
+            self.grid_panel.redraw_grid()
+            self.current_path,_ = self.grid.find_path(self.rover_position,self.current_destination)
+
             
     def send_point_to_gps(self):
-         if len(self.grid_panel.current_path)>0:
-             node = self.grid_panel.current_path.pop(0)
-             if node == self.grid_panel.rover_position:
-                 node = self.grid_panel.current_path.pop(0)
+         if len(self.simple_path)>0:
+             node = self.simple_path.pop(0)
+             if node == self.rover_position:
+                 node = self.simple_path.pop(0)
              destination = self.grid.get_global_coord_from_node(node)
              self.queue.put(destination)
              
     def find_path(self):
         if self.current_destination is not None:
-            self.current_path = self.grid.find_path(self.rover_position,self.current_destination)
+            self.current_path,self.simple_path = self.grid.find_path(self.rover_position,self.current_destination)
             
     def save(self):
         options = QFileDialog.Options()
@@ -408,12 +442,6 @@ class GridPanel(QGroupBox):
         if self.current_path is not None and len(self.current_path) > 0:
             self.current_path.pop(0)
             self.redraw_grid()
-
-    def on_obstacle_found(self,position):
-        if position.x >= 0 and position.y > 0 and position.x <= 2.5 and position.y <= 3.5:
-            node = self.grid.node_from_global_coord(position)
-            if self.on_obstacle_added(node):
-                self.redraw_grid()
 
         
 class GridButton(QPushButton):
