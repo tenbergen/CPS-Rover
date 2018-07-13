@@ -59,18 +59,18 @@ class AdvancedGoPiGo3():
 
 
     def rotate_left(self,degrees):
-        self.gpg.turn_degrees(abs(self.__rotation_compensation(degrees)))
+        self.gpg.turn_degrees(-abs(self.__rotation_compensation(degrees)))
 
     def rotate_right_forever(self):
-        self.gpg.set_motor_dps(self.gpg.MOTOR_LEFT, -self.speed/2)
-        self.gpg.set_motor_dps(self.gpg.MOTOR_RIGHT, self.speed/2)
-
-    def rotate_left_forever(self):
         self.gpg.set_motor_dps(self.gpg.MOTOR_LEFT, self.speed/2)
         self.gpg.set_motor_dps(self.gpg.MOTOR_RIGHT, -self.speed/2)
 
+    def rotate_left_forever(self):
+        self.gpg.set_motor_dps(self.gpg.MOTOR_LEFT, -self.speed/2)
+        self.gpg.set_motor_dps(self.gpg.MOTOR_RIGHT, self.speed/2)
+
     def rotate_right(self,degrees):
-        self.gpg.turn_degrees(-abs(self.__rotation_compensation(degrees)))
+        self.gpg.turn_degrees(abs(self.__rotation_compensation(degrees)))
         
     def __rotation_compensation(self,degrees):
         return degrees + (degrees * (self.angle_compensation/360))
