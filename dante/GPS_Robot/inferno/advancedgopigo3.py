@@ -49,6 +49,7 @@ class AdvancedGoPiGo3():
         and to simplify other aspects of Easygopigo3 and gopigo3 for easy of typing.
 
         It also allows users to compensate for assymetries between calculated versus actual in the hardware.
+        It additionally makes overriding existing methods much easier.
 
 "   """
 
@@ -56,8 +57,31 @@ class AdvancedGoPiGo3():
         self.gpg = easygopigo3.EasyGoPiGo3(use_mutex)
         self.speed = self.gpg.get_speed()
         self.angle_compensation = angle_compensation #this corrects for the ability to rotate one full circle.
+        
+    def volt(self):
+        return self.gpg.volt()
+    '''
+    The folowing methods involve the speed of the robot.
 
+    '''
+    def get_speed(self):
+        return self.speed
 
+    def set_speed(self, inspeed):
+        self.gpg.set_speed(inspeed)
+
+    def reset_speed(self):
+        self.gpg.reset_speed()
+
+    def set_left_wheel(self,speed):
+        self.gpg.set_motor_limits(self.gpg.MOTOR_LEFT, dps=speed)
+
+    def set_right_wheel(self,speed):
+        self.gpg.set_motor_limits(self.gpg.MOTOR_RIGHT, dps=speed)
+
+    '''
+    The following methods involve the movement of the robot, including turning and rotation.
+    '''
     def rotate_left(self,degrees):
         self.gpg.turn_degrees(-abs(self.__rotation_compensation(degrees)))
 
@@ -75,22 +99,35 @@ class AdvancedGoPiGo3():
     def __rotation_compensation(self,degrees):
         return degrees + (degrees * (self.angle_compensation/360))
 
-    def set_left_wheel(self,speed):
-        self.gpg.set_motor_limits(self.gpg.MOTOR_LEFT, dps=speed)
+    def right(self):
+        self.gpg.right()
 
-    def set_right_wheel(self,speed):
-        self.gpg.set_motor_limits(self.gpg.MOTOR_RIGHT, dps=speed)
+    def left(self):
+        self.gpg.left()
 
     def forward(self):
         self.gpg.forward()
+        
     def backward(self):
         self.gpg.backward()
+        
     def stop(self):
         self.gpg.stop()
-    def drive_cm(self,distance):
-        self.gpg.drive_cm(distance)
-    def set_speed(self,speed):
-        self.gpg.set_speed(speed)
+        
+    def drive_cm(self,distance,blocking = True):
+        self.gpg.drive_cm(distance,blocking)
+
+    def drive_inches(self, dist, blocking=True):
+        self.gpg.drive_inches(dist,blocking)
+
+    def drive_degrees(self, degrees, blocking=True):
+        self.gpg.drive_degrees(degrees,blocking)
+
+                               
+        
+    '''
+    The following methods involve the lights and LEDS on the gpg board.
+    '''
 
     def led_on(self,id):
         self.gpg.led_on(id)
@@ -100,5 +137,4 @@ class AdvancedGoPiGo3():
         self.gpg.open_eyes()
     def close_eyes(self):
         self.gpg.close_eyes()
-    def volt(self):
-        return self.gpg.volt()
+

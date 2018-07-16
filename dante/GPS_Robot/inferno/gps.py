@@ -94,6 +94,7 @@ class GPS(Thread):
                 self.get_position_callback()
                 self.check_for_obstacles()
                 time.sleep(.1)
+        self.stop()
                 
     #the following methods set callbacks or get them.
     #If they are getting them, they will do nothing if None is used            

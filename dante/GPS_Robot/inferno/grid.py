@@ -139,11 +139,11 @@ class Grid:
     #set a nodes type.
     def set_node_type(self,node,node_type):
         #add border if obstacle otherwise re-calcing borders is neccessary
-        old_type = self.node_type
+        old_type = node.node_type
         node.node_type = node_type
         if node_type == OBSTACLE:
-            self.spread_border(node,self.border_thickess, self.include_diagonals)
-            self.all_obstacles.append(node)
+            self.spread_border(node,self.border_thickness, self.include_diagonals)
+            self.all_obstacles.add(node)
         else:
             if old_type == OBSTACLE:
                 self.all_obstacles.remove(node)
