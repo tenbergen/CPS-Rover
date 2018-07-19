@@ -32,7 +32,7 @@ class Server:
         self.grid_y = 28
         self.offset_x = 0
         self.offset_y = 0
-        self.border_thickness = 2
+        self.border_thickness = 1
         self.use_diagonals = True
         self.grid = Grid(self.grid_width, self.grid_height, self.grid_x, self.grid_y, self.offset_x, self.offset_y,
                          self.border_thickness, self.use_diagonals)
@@ -60,8 +60,8 @@ class Server:
 
         # initialize gps
         self.gps_queue = queue.Queue()
-        self.gps = GPS(self.gps_queue, True, self.gpg, debug_mode=False)
-        self.gps.minimum_distance = 100
+        self.gps = GPS(self.gps_queue, 10,1, self.gpg, debug_mode=False)
+        self.gps.minimum_distance = 50
         self.gps_can_run = True
         self.gps.set_obstacle_callback(self.obstacle_found)
         self.gps.set_position_callback(self.rover_position_change)
@@ -155,6 +155,7 @@ class Server:
             elif command == 'S':
                 self.gpg.stop()
                 self.gps.cancel_early = True
+                self.gps_can_run = False
             elif command == 'Q':
                 print("Quitting")
                 self.can_run = False
@@ -209,6 +210,7 @@ class Server:
                 # we need a new full route.
                 self.current_path, _ = self.grid.find_path(self.rover_position, self.current_destination)
                 self.send_path()
+                
 
                 # send info along
                 self.send_message("R " + str(node.gridPos.x) + " "+ str(node.gridPos.y))
@@ -224,6 +226,8 @@ class Server:
                 self.current_destination is not None and self.current_destination == self.rover_position):
             print("final destination reached")
             self.send_message("DR")
+            self.gpg.stop()
+            self.gps.cancel_early = True
             self.gps_can_run = False
 
     def obstacle_found(self, position):

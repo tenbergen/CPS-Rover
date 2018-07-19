@@ -5,6 +5,9 @@
 #
 ### Attributes:
 #
+#   adr - address of mobile beacon (from Dashboard) for data filtering. If it is None, every read data will be appended to buffer.
+#       default: None
+#
 #   tty - serial port device name (physical or USB/virtual). It should be provided as an argument: 
 #       /dev/ttyACM0 - typical for Linux / Raspberry Pi
 #       /dev/tty.usbmodem1451 - typical for Mac OS X
@@ -70,7 +73,7 @@ import math
 # import marvelmindQuaternion as mq
 
 class MarvelmindHedge (Thread):
-    def __init__ (self, adr, tty="/dev/ttyACM0", baud=9600, maxvaluescount=3, debug=False, recieveUltrasoundPositionCallback=None, recieveImuRawDataCallback=None, recieveImuDataCallback=None, recieveUltrasoundRawDataCallback=None):
+    def __init__ (self, adr=None, tty="/dev/ttyACM0", baud=9600, maxvaluescount=3, debug=False, recieveUltrasoundPositionCallback=None, recieveImuRawDataCallback=None, recieveImuDataCallback=None, recieveUltrasoundRawDataCallback=None):
         self.tty = tty  # serial
         self.baud = baud  # baudrate
         self.debug = debug  # debug flag
@@ -180,9 +183,10 @@ class MarvelmindHedge (Thread):
                                     if CRC_calc == usnCRC16:
                                         if (isMmMessageDetected or isCmMessageDetected):
                                             value = [usnAdr, usnX, usnY, usnZ, usnTimestamp]
-                                            self.valuesUltrasoundPosition.append(value)
-                                            if (self.recieveUltrasoundPositionCallback is not None):
-                                                self.recieveUltrasoundPositionCallback()
+                                            if (self.adr == usnAdr or self.adr is None):
+                                                self.valuesUltrasoundPosition.append(value)
+                                                if (self.recieveUltrasoundPositionCallback is not None):
+                                                    self.recieveUltrasoundPositionCallback()
                                         elif (isRawImuMessageDetected):
                                             value = [ax, ay, az, gx, gy, gz, mx, my, mz, timestamp]
                                             self.valuesImuRawData.append(value)
