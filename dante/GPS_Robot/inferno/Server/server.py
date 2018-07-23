@@ -49,12 +49,12 @@ class Server:
         self.gpg = AdvancedGoPiGo3(25)
         volt = self.gpg.volt()
         print("Current Voltage: ", volt)
-        if volt < 9:
-            print("Warning, voltage is getting low, impaired performance is expected.")
-        elif volt < 8:
+        if volt < 8:
             print(
                 "Critical! voltage is very low, please charge the batteries before continuing!  You have been warned!")
-
+        elif volt < 9:
+            print("Warning, voltage is getting low, impaired performance is expected.")
+        
         # initialize send queue
         self.send_queue = queue.Queue()
 
@@ -65,6 +65,7 @@ class Server:
         self.gps_can_run = True
         self.gps.set_obstacle_callback(self.obstacle_found)
         self.gps.set_position_callback(self.rover_position_change)
+        self.gps.set_no_obstacle_callback(self.on_no_obstacles)
         self.gps.set_reached_point_callback(self.destination_reached)
         
 
@@ -116,11 +117,8 @@ class Server:
                 x = int(data.pop(0))
                 y = int(data.pop(0))
                 node_type = int(data.pop(0))
-                self.grid.set_node(x, y, node_type)
-                if node_type == OBSTACLE:
-                    self.add_obstacle(self.grid.nodes[x][y])
-                else:
-                    self.find_path()
+                self.node_changed(x,y,node_type)
+
 
             # destination change
             elif command == 'D':
@@ -153,7 +151,6 @@ class Server:
             # REMOTE CONTROL COMMANDS
             # STOP
             elif command == 'S':
-                self.gpg.stop()
                 self.gps.cancel_early = True
                 self.gps_can_run = False
             elif command == 'Q':
@@ -192,7 +189,32 @@ class Server:
                 self.gpg.led_off(0)
                 self.gpg.led_off(1)
                 self.gpg.close_eyes()
+                
+    def node_changed(self,x,y,node_type):
+        self.grid.set_node(x, y, node_type)
+        if node_type == OBSTACLE:
+            self.add_obstacle(self.grid.nodes[x][y])
+            #self.send_message("N " + str(node.gridPos.x) + " " + str(node.gridPos.y) + " 0")
+        self.find_path()
 
+    def node_changed(self,node,node_type):
+        self.grid.set_node_type(node, node_type)
+        #self.add_obstacle(self.grid.nodes[node.gridPos.x][node.gridPos.y])
+        self.send_message("N " + str(node.gridPos.x) + " " + str(node.gridPos.y) + " 0")
+        self.find_path()
+
+    def on_no_obstacles(self,position):
+        if position.x > 0 and position.y > 0 and position.x <= self.grid_width and position.y <= self.grid_height:
+            node = self.grid.node_from_global_coord(position)
+            path,_ = self.grid.find_path(self.rover_position,node,False)
+            #print(path)
+            for p in path:
+                if p.node_type != 0:
+                    if p.gridPos.x > 0 and p.gridPos.y > 0 and p.gridPos.x < self.grid.nodes_in_x and p.gridPos.y < self.grid.nodes_in_y:
+                        #print("node changed",p.gridPos.x,p.gridPos.y)
+                        self.node_changed(p,0)
+                    
+    
     def rover_position_change(self, position):
         # We only care about it if it is in the grid.
         if position.x > 0 and position.y > 0 and position.x <= self.grid_width and position.y <= self.grid_height:
@@ -222,7 +244,7 @@ class Server:
         self.next_gps_point()
 
         # if we are at our final destination, we are done.
-        if len(self.current_path) == 0 or len(self.simple_path) == 0 or (
+        if len(self.simple_path) == 0 or (
                 self.current_destination is not None and self.current_destination == self.rover_position):
             print("final destination reached")
             self.send_message("DR")
@@ -242,6 +264,14 @@ class Server:
                 # we have an obstacle!
                 self.add_obstacle(node)
 
+                path,_ = self.grid.find_path(self.rover_position,node,False)
+                path.pop(-1)
+                for p in path:
+                    if p.node_type != 0:
+                        if p.gridPos.x > 0 and p.gridPos.y > 0 and p.gridPos.x < self.grid.nodes_in_x and p.gridPos.y < self.grid.nodes_in_y:
+                            #print("node changed",p.gridPos.x,p.gridPos.y)
+                            self.node_changed(p,0)
+
     def add_obstacle(self, node, send_message=True):
         # if we have a valid node to work with.
         if node.node_type != 1 and node != self.rover_position:
@@ -258,16 +288,17 @@ class Server:
                     self.current_destination = None
                     self.current_path = []
                     self.simple_path = []
-                else:
-                    # we need a new path
-                    self.find_path()
-                    
-                    # if we are currently in motion.  let's go!
-                    if self.gps_can_run and len(self.simple_path) > 0:
-                        destination = self.grid.get_global_coord_from_node(self.simple_path.pop(0))
-                        self.gps_queue.queue.clear()
-                        self.gps.cancel_early = True
-                        self.gps_queue.put(destination)
+                
+                # we need a new path
+                print("obstacle, new path")
+                self.find_path()
+                
+                # if we are currently in motion.  let's go!
+                if self.gps_can_run and len(self.simple_path) > 0:
+                    destination = self.grid.get_global_coord_from_node(self.simple_path[0])
+                    self.gps_queue.queue.clear()
+                    self.gps.cancel_early = True
+                    self.gps_queue.put(destination)
 
     def find_path(self, send_message=True):
         if self.current_destination is not None:
@@ -275,21 +306,20 @@ class Server:
 
             # send paths
             if send_message:
+                print("sending paths")
                 self.send_path()
                 self.send_simple_path()
 
     def next_gps_point(self):
         # if we actually have somewhere to go
         if len(self.simple_path) > 0:
-            node = self.simple_path.pop(0)
+            node = self.simple_path[0]
             if node == self.rover_position and len(self.simple_path) > 0:
                 node = self.simple_path.pop(0)
             destination = self.grid.get_global_coord_from_node(node)
             self.gps_queue.put(destination)
             self.send_simple_path()
-        else:
-            self.gps_can_run = False
-            self.send_message("DR")
+
 
     def send_message(self, message):
         # puts a message in the send queue

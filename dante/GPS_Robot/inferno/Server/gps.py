@@ -7,7 +7,7 @@ from vector import Vector
 from threading import Thread
 from queue import Queue
 
-DISTANCE_FROM_CENTER = 15
+DISTANCE_FROM_CENTER = 0
 
 
 # This class serves as a wrapper for marvelmind and gopigo movement.
@@ -50,6 +50,7 @@ class GPS(Thread):
         self.__position_callback = None
         self.__obstacle_callback = None
         self.__reached_point_callback = None
+        self.__no_obstacles_callback = None
 
         # set initial position
         #time.sleep(.1)
@@ -77,6 +78,7 @@ class GPS(Thread):
             # if we have a command
             if not self.command_queue.empty():
                 command = self.command_queue.get()
+                print("point received",command)
 
                 # goto point
                 self.destination = command
@@ -127,6 +129,13 @@ class GPS(Thread):
         if self.__reached_point_callback is not None:
             self.__reached_point_callback(self.transform.position)
         print("destination reached!")
+
+    def set_no_obstacle_callback(self,callback):
+        self.__no_obstacles_callback = callback
+        
+    def get_no_obstacle_callback(self,positions):
+        if self.__no_obstacles_callback is not None:
+            self.__no_obstacles_callback(positions)
 
     # returns the current distance from the destination
     def distance(self, destination, update=False):
@@ -280,7 +289,7 @@ class GPS(Thread):
 
 
             # have we been going straight long enough to determine our own rotation?
-            if len(previous_locations) == 4:
+            if len(previous_locations) == 2:
 
                 # are we on an intercept trajectory?
                 corrections = self.__plot_intersection()
@@ -475,6 +484,18 @@ class GPS(Thread):
 
             pos = Vector(x, y)
             self.get_obstacle_callback(pos)
+        else:
+            offset = 0
+
+            distance = self.minimum_distance
+            # get its position and send to callback
+            distance += DISTANCE_FROM_CENTER
+            distance = distance / 100
+            x = (math.cos(math.radians(self.transform.rotation + offset)) * distance) + self.transform.position.x
+            y = (math.sin(math.radians(self.transform.rotation + offset)) * distance) + self.transform.position.y
+
+            pos = Vector(x, y)
+            self.get_no_obstacle_callback(pos)
 
     # These might be depricated Gopigo3s travel quite straight and
     # forward seems to do something like this any way?
