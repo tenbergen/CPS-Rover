@@ -1,9 +1,14 @@
 import pygame
 import socket
-from PyQt5.QtCore import QThread,pyqtSignal
+from PyQt5.QtCore import QThread,pyqtSignal,Qt
+from PyQt5.QtGui import QImage
 import select
 from vector import Vector
-
+import struct
+import cv2
+import io
+import numpy as np
+import time
 
 class Client(QThread):
     on_rover_position_changed = pyqtSignal(Vector)
@@ -180,3 +185,31 @@ class Client(QThread):
 
     def __del__(self):
         self.wait()
+
+
+class VideoStream(QThread):
+    changePixmap = pyqtSignal(QImage)
+
+    def __init__(self):
+        QThread.__init__(self)
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.can_run = True
+
+    def run(self):
+        self.socket.connect(("dante.local", 10001))
+        connection = self.socket.makefile('rb')
+        cap = cv2.VideoCapture(0)
+        while self.can_run:
+            time.sleep(1./25)
+            image_len = struct.unpack('<L', connection.read(struct.calcsize('<L')))[0]
+
+            image_stream = io.BytesIO()
+            image_stream.write(connection.read(image_len))
+            image_stream.seek(0)
+            file_bytes = np.asarray(bytearray(image_stream.read()), dtype=np.uint8)
+            image = cv2.imdecode(file_bytes,cv2.IMREAD_COLOR)
+            rgbImage = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            convertToQtFormat = QImage(rgbImage.data, rgbImage.shape[1], rgbImage.shape[0], QImage.Format_RGB888)
+            p = convertToQtFormat.scaled(320, 240, Qt.KeepAspectRatio)
+            self.changePixmap.emit(p)
+        self.socket.close()

@@ -88,9 +88,14 @@ class Grid:
     def node_from_global_coord(self,coords):
         x = int((coords.x - self.__world_bottom_left.x)/ self.node_length_x)
         y = int((coords.y - self.__world_bottom_left.y)/ self.node_length_y)
-        if coords.x >= 0 and coords.x <= self.nodes_in_x and coords.y >= 0 and coords.y <= self.nodes_in_y:
-            temp = self.nodes[x][y]
-        else:
+        try:
+            
+            if coords.x >= 0 and coords.x <= self.nodes_in_x and coords.y >= 0 and coords.y <= self.nodes_in_y:
+                temp = self.nodes[x][y]
+            else:
+                temp = None
+        except:
+            print("out of range")
             temp = None
         return temp
 
@@ -182,7 +187,7 @@ class Grid:
 
     #Uses an A* pathfinding solution inorder to find the shortest route to the destination.
     #it returns a tuple, the full path and a simplified path.
-    def find_path(self,start,end):
+    def find_path(self,start,end,use_obstacles=True):
         #initialize lists
         path = []
         simple_path = []
@@ -192,7 +197,7 @@ class Grid:
             return [],[]
         elif start == end:
             return [],[]
-        elif end.node_type != OPEN_SPACE:
+        elif end.node_type != OPEN_SPACE and use_obstacles:
             return [],[]
         
         #initialize variables
@@ -219,22 +224,38 @@ class Grid:
             neighbor_list = current_node.get_neighbors(self.include_diagonals)
             for neighbor in neighbor_list:
 
-                #if this is a nieghbor worth calculating calculate its cost.
-                if neighbor.node_type == OPEN_SPACE and not closed_set.__contains__(neighbor):
-                    new_movement_cost = current_node.g_cost + self.__get_distance(current_node,neighbor)
+                if use_obstacles:
+                    #if this is a nieghbor worth calculating calculate its cost.
+                    if neighbor.node_type == OPEN_SPACE and not closed_set.__contains__(neighbor):
+                        new_movement_cost = current_node.g_cost + self.__get_distance(current_node,neighbor)
 
-                    #If this is a better route, or this is a new node.
-                    if new_movement_cost < neighbor.g_cost or not open_set.__contains__(neighbor):
-                        neighbor.g_cost = new_movement_cost
-                        neighbor.h_cost = self.__get_distance(neighbor,end)
-                        neighbor.parent = current_node
+                        #If this is a better route, or this is a new node.
+                        if new_movement_cost < neighbor.g_cost or not open_set.__contains__(neighbor):
+                            neighbor.g_cost = new_movement_cost
+                            neighbor.h_cost = self.__get_distance(neighbor,end)
+                            neighbor.parent = current_node
 
-                        #If the node is already going to be calculated, resort it.  otherwise add it to the set.
-                        if open_set.__contains__(neighbor):
-                            heapq.heapify(open_set)
-                        else:
-                            heapq.heappush(open_set,neighbor)
+                            #If the node is already going to be calculated, resort it.  otherwise add it to the set.
+                            if open_set.__contains__(neighbor):
+                                heapq.heapify(open_set)
+                            else:
+                                heapq.heappush(open_set,neighbor)
+                else:
+                    #if this is a nieghbor worth calculating calculate its cost.
+                    if not closed_set.__contains__(neighbor):
+                        new_movement_cost = current_node.g_cost + self.__get_distance(current_node,neighbor)
 
+                        #If this is a better route, or this is a new node.
+                        if new_movement_cost < neighbor.g_cost or not open_set.__contains__(neighbor):
+                            neighbor.g_cost = new_movement_cost
+                            neighbor.h_cost = self.__get_distance(neighbor,end)
+                            neighbor.parent = current_node
+
+                            #If the node is already going to be calculated, resort it.  otherwise add it to the set.
+                            if open_set.__contains__(neighbor):
+                                heapq.heapify(open_set)
+                            else:
+                                heapq.heappush(open_set,neighbor)
         return path,simple_path
 
     #this simplifies an existing path to only include nodes that cause a direction change
