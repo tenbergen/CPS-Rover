@@ -14,8 +14,10 @@ from advancedgopigo3 import *
 from grid import Grid
 import select
 import traceback
+from camera_server import *
 HOST = 'dante.local'
 PORT = 10000
+
 
 OPEN_SPACE = 0
 OBSTACLE = 1
@@ -83,6 +85,10 @@ class Server:
         # get the connection
         self.conn, self.addr = self.socket.accept()
         print("Successful connection from ", self.addr)
+
+        #start the video server
+        self.video = VideoServer()
+        self.video.start()
         self.gps.start()
 
     # this method manages incoming and outgoing commands
@@ -352,8 +358,11 @@ if __name__ == "__main__":
         print(e)
         print(traceback.format_exc())
     finally:
+        server.conn.close()
         server.socket.shutdown(socket.SHUT_RDWR)
         server.socket.close()
+        server.video.can_rune = False
+        server.video.join(2)
         server.gps.thread_done = True
         server.gps.cancel_early = True
         server.gps.join()
