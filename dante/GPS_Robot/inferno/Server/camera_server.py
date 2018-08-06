@@ -48,11 +48,11 @@ class VideoServer(Thread):
                     stream.seek(0)
                     stream.truncate()
 
+                    if not self.can_run:
+                        break
                 # we're done with the package
                 self.connection.write(struct.pack('<L', 0))
         except:
             print("Clumsy Exit")
         finally:
-            self.connection.flush()
-            self.connection.close()
             self.server.close()

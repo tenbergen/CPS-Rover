@@ -153,7 +153,7 @@ class Server:
             elif command == 'S':
                 self.gps.cancel_movement()
                 self.gps_can_run = False
-                self.gpg.stop()
+
             elif command == 'Q':
                 print("Quitting")
                 self.can_run = False
@@ -244,8 +244,7 @@ class Server:
                 self.current_destination is not None and self.current_destination == self.rover_position):
             print("final destination reached")
             self.send_message("DR")
-            self.gpg.stop()
-            self.gps.cancel_early = True
+            self.gps.cancel_movement()
             self.gps_can_run = False
 
     def obstacle_found(self, position):
