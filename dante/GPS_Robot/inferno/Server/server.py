@@ -129,8 +129,7 @@ class Server:
                     self.current_destination = None
                     self.current_path = []
                     self.simple_path = []
-                    self.gpg.stop()
-                    self.gps.cancel_early = True
+                    self.gps.cancel_movement()
                 else:
                     node = self.grid.nodes[x][y]
                     if node.node_type == OPEN_SPACE and node != self.rover_position:
@@ -152,7 +151,7 @@ class Server:
             # REMOTE CONTROL COMMANDS
             # STOP
             elif command == 'S':
-                self.gps.cancel_early = True
+                self.gps.cancel_movement()
                 self.gps_can_run = False
                 self.gpg.stop()
             elif command == 'Q':

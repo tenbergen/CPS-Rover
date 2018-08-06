@@ -1,6 +1,6 @@
 import pygame
 import socket
-from PyQt5.QtCore import QThread,pyqtSignal,Qt
+from PyQt5.QtCore import QThread, pyqtSignal, Qt
 from PyQt5.QtGui import QImage
 import select
 from vector import Vector
@@ -12,6 +12,7 @@ import numpy as np
 
 # TODO comment everything
 class Client(QThread):
+    # Signal events
     on_rover_position_changed = pyqtSignal(Vector)
     on_destination_reached = pyqtSignal()
     on_node_changed = pyqtSignal(Vector, int)
@@ -25,41 +26,56 @@ class Client(QThread):
         self.joysticks = []
         pygame.display.init()
         pygame.joystick.init()
-        # stores all connected controllers
+
+        # store all connected controllers
         for i in range(0, pygame.joystick.get_count()):
             self.joysticks.append(pygame.joystick.Joystick(i))
             self.joysticks[-1].init()
         self.clock = pygame.time.Clock()
 
+        # start the server
         self.socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         self.can_run = True
         self.remote_on = False
         self.send_queue = send_queue
 
+    # establish a connection to the server
     def connect_to_server(self):
         try:
             self.socket.connect(("dante.local", 10000))
         except Exception as e:
             print(e)
 
+    # loop for thread execution
     def run(self):
+
+        # while we aren't closing the thread
         while self.can_run:
+
+            # get some data from the connection
             r, _, _ = select.select([self.socket], [], [], .1)
             if r:
+                # parse the data
                 data = self.socket.recv(1024).decode('utf-8').split()
                 print(data)
                 self.parse_data(data)
 
+            # send data over the connection
             while not self.send_queue.empty():
                 data = self.send_queue.get()
                 self.send_message(data)
 
+            # if the controller is active, send pygame events
             if self.remote_on:
                 self.handle_controller_events()
         self.socket.close()
 
+    # TODO add control scheme here as comment block
+    # this method handles controller events
     def handle_controller_events(self):
         for event in pygame.event.get():
+
+            # handle button presses
             if event.type == pygame.JOYBUTTONDOWN:
                 if event.button == 0:
                     self.send_message("LON")
@@ -69,6 +85,7 @@ class Client(QThread):
                     # send_message("Home")
                 elif event.button == 11:
                     self.send_message("S")
+            # handle axis movement
             elif event.type == pygame.JOYAXISMOTION:
                 if 0 != self.joysticks[0].get_axis(0) or 0 != self.joysticks[0].get_axis(1):
                     x = float(self.joysticks[0].get_axis(0))
@@ -119,6 +136,7 @@ class Client(QThread):
                             cur_y = ((cur_y + cur_x) / 2)
                     self.send_message("M " + str(cur_x) + " " + str(cur_y))
 
+            # handle button release
             elif event.type == pygame.JOYBUTTONUP:
                 if event.button == 13 or event.button == 14 or event.button == 15 or event.button == 16:
                     self.send_message("S")
@@ -182,6 +200,7 @@ class Client(QThread):
 
                 self.on_path_changed.emit(path)
 
+    # send message through the connection.
     def send_message(self, message):
         # puts a message in the send queue
         self.socket.send((" " + message).encode())
@@ -190,36 +209,47 @@ class Client(QThread):
         self.wait()
 
 
+# this class continually updates the image from the video information being send over.
 class VideoStream(QThread):
     changePixmap = pyqtSignal(QImage)
 
+    # setup received connection
     def __init__(self):
         QThread.__init__(self)
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.can_run = True
 
+    # attempt a connection to the server
     def connect_to_server(self):
         try:
             self.socket.connect(("dante.local", 10001))
         except Exception as e:
             print(e)
 
+    # thread loop
     def run(self):
 
+        # treat the socket connection as a file
         connection = self.socket.makefile('rb')
-        cap = cv2.VideoCapture(0)  #TODO try changing this so this isn't needed.
+        cap = cv2.VideoCapture(0)  # TODO try changing this so this isn't needed.
+
+        # while we are allowed to run
         while self.can_run:
 
+            # start unpacking data
             image_len = struct.unpack('<L', connection.read(struct.calcsize('<L')))[0]
-
             image_stream = io.BytesIO()
             image_stream.write(connection.read(image_len))
             image_stream.seek(0)
             file_bytes = np.asarray(bytearray(image_stream.read()), dtype=np.uint8)
+
+            # convert bytes into an image
             image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
             rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             convert_to_qt_format = QImage(rgb_image.data, rgb_image.shape[1], rgb_image.shape[0], QImage.Format_RGB888)
             p = convert_to_qt_format.scaled(480, 320, Qt.KeepAspectRatio)
+
+            # if we are allowed to run, update the image
             if self.can_run:
                 self.changePixmap.emit(p)
         self.socket.close()

@@ -47,10 +47,10 @@ except Exception as e:
 
 class AdvancedGoPiGo3:
     """
-        this class exists to return some functionatlity from the original gopigo
-        and to simplify other aspects of Easygopigo3 and gopigo3 for easy of typing.
+        this class exists to return some functionality from the original gopigo
+        and to simplify other aspects of EasyGoPiGo3 and gopigo3 for easy of typing.
 
-        It also allows users to compensate for assymetries between calculated versus actual in the hardware.
+        It also allows users to compensate for asymmetries between calculated versus actual rotation in the hardware.
         It additionally makes overriding existing methods much easier.
 
 "   """
@@ -58,7 +58,7 @@ class AdvancedGoPiGo3:
     def __init__(self, angle_compensation=0, use_mutex=False):
         self.gpg = easygopigo3.EasyGoPiGo3(use_mutex)
         self.speed = self.gpg.get_speed()
-        self.angle_compensation = angle_compensation # this corrects for the ability to rotate one full circle.
+        self.angle_compensation = angle_compensation  # this corrects for the ability to rotate one full circle.
         
     def volt(self):
         return self.gpg.volt()
@@ -84,7 +84,7 @@ class AdvancedGoPiGo3:
     '''
     The following methods involve the movement of the robot, including turning and rotation.
     '''
-    def rotate_left(self,degrees):
+    def rotate_left(self, degrees):
         self.gpg.turn_degrees(-abs(self.__rotation_compensation(degrees)))
 
     def rotate_right_forever(self):
@@ -95,7 +95,7 @@ class AdvancedGoPiGo3:
         self.gpg.set_motor_dps(self.gpg.MOTOR_LEFT, -self.speed/2)
         self.gpg.set_motor_dps(self.gpg.MOTOR_RIGHT, self.speed/2)
 
-    def rotate_right(self,degrees):
+    def rotate_right(self, degrees):
         self.gpg.turn_degrees(abs(self.__rotation_compensation(degrees)))
         
     def __rotation_compensation(self, degrees):
@@ -116,14 +116,14 @@ class AdvancedGoPiGo3:
     def stop(self):
         self.gpg.stop()
         
-    def drive_cm(self,distance,blocking = True):
-        self.gpg.drive_cm(distance,blocking)
+    def drive_cm(self,distance, blocking=True):
+        self.gpg.drive_cm(distance, blocking)
 
     def drive_inches(self, dist, blocking=True):
-        self.gpg.drive_inches(dist,blocking)
+        self.gpg.drive_inches(dist, blocking)
 
     def drive_degrees(self, degrees, blocking=True):
-        self.gpg.drive_degrees(degrees,blocking)
+        self.gpg.drive_degrees(degrees, blocking)
 
                                
         

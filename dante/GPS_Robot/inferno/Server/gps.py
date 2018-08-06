@@ -7,8 +7,6 @@ from threading import Thread
 DISTANCE_FROM_CENTER = 0
 
 
-# TODO encapsulate variables in use with set/get
-# TODO convert methods to static.
 # This class serves as a wrapper for marvelmind and gopigo movement.
 # It uses them together to find its way to destinations
 class GPS(Thread):
@@ -22,26 +20,26 @@ class GPS(Thread):
         self.distance_sensor = self.gpg.gpg.init_distance_sensor()
 
         # initialize gps "settings"
-        self.threshold = .06
-        self.command_queue = q
-        self.minimum_distance = 45
+        self.__threshold = .06
+        self.__command_queue = q
+        self.__minimum_distance = 45
         self.__debug = debug_mode
-        self.cancel_early = False
-        self.thread_done = False
+        self.__cancel_early = False
+        self.__thread_done = False
 
         # setup geometry information
-        self.transform = Transform()
-        self.rear_position = Vector()
-        self.speed = speed
+        self.__transform = Transform()
+        self.__rear_position = Vector()
+        self.__speed = speed
         self.gpg.set_speed(speed)
-        self.destination = None
+        self.__destination = None
 
         # setup thread information
         self.path = []
 
         # start the hedge
-        self.front_hedge = front_hedge
-        self.rear_hedge = rear_hedge
+        self.__front_hedge = front_hedge
+        self.__rear_hedge = rear_hedge
         self.__hedge = MarvelmindHedge(tty="/dev/ttyACM0", recieveUltrasoundPositionCallback=self.position_update)
         self.__hedge.start()
 
@@ -59,16 +57,16 @@ class GPS(Thread):
     def run(self):
 
         # FOREVER
-        while not self.thread_done:
+        while not self.__thread_done:
 
             # if we have a command
-            if not self.command_queue.empty():
-                command = self.command_queue.get()
+            if not self.__command_queue.empty():
+                command = self.__command_queue.get()
                 print("point received", command)
 
                 # goto point
-                self.destination = command
-                self.goto_point(self.destination)
+                self.__destination = command
+                self.goto_point(self.__destination)
 
             # if we have nothing to do
             else:
@@ -81,14 +79,15 @@ class GPS(Thread):
     # A callback sent to the hedge, it changes the position and rotation information every time it receives an update.
     def position_update(self):
         position = self.__hedge.position()
-        if position[0] == self.front_hedge:
-            self.transform.position = self.__convert_hedge_coords(position)
+        if position[0] == self.__front_hedge:
+            self.__transform.position = self.__convert_hedge_coords(position)
         else:
-            self.rear_position = self.__convert_hedge_coords(position)
-        self.transform.rotation = self.get_angle(self.transform.position, self.rear_position)
+            self.__rear_position = self.__convert_hedge_coords(position)
+        self.__transform.rotation = self.get_angle(self.__transform.position, self.__rear_position)
 
     # converts a hedge position into a 2D Vector in the transform
-    def __convert_hedge_coords(self, position):
+    @staticmethod
+    def __convert_hedge_coords(position):
         return Vector(position[1], position[2])
 
     # the following methods set callbacks or get them.
@@ -98,7 +97,7 @@ class GPS(Thread):
 
     def get_position_callback(self):
         if self.__position_callback is not None:
-            self.__position_callback(self.transform.position)
+            self.__position_callback(self.__transform.position)
 
     def set_obstacle_callback(self, callback):
         self.__obstacle_callback = callback
@@ -112,7 +111,7 @@ class GPS(Thread):
 
     def get_reached_point_callback(self):
         if self.__reached_point_callback is not None:
-            self.__reached_point_callback(self.transform.position)
+            self.__reached_point_callback(self.__transform.position)
         print("destination reached!")
 
     def set_no_obstacle_callback(self, callback):
@@ -122,31 +121,38 @@ class GPS(Thread):
         if self.__no_obstacles_callback is not None:
             self.__no_obstacles_callback(positions)
 
+    def cancel_movement(self):
+        self.__cancel_early = True
+
+    def stop_thread(self):
+        self.__thread_done = False
+
     # returns the current distance from the destination
     def distance(self, destination):
-        return self.__distance(self.transform.position, destination)
+        return self.__distance(self.__transform.position, destination)
 
     # Gets the distance between start and end
-    def __distance(self, a, b):
+    @staticmethod
+    def __distance(a, b):
         return pow(pow(a.x - b.x, 2) + pow(a.y - b.y, 2), .5)
 
     def distance_to_destination(self):
-        return self.distance(self.destination)
+        return self.distance(self.__destination)
 
     # get the current position of rover
     def get_position(self):
-        return self.transform.position
+        return self.__transform.position
 
     # get the current rotation
     def get_rotation(self):
-        return self.transform.rotation
+        return self.__transform.rotation
 
     # this stops the hedge from recording positions
     def stop(self):
         self.__hedge.stop()
         self.gpg.stop()
-        self.cancel_early = True
-        self.thread_done = True
+        self.__cancel_early = True
+        self.__thread_done = True
 
     # get the angle between two points and horizontal axis
     # a is the destination
@@ -172,40 +178,40 @@ class GPS(Thread):
     def goto_point(self, coord):
 
         # mark our new destination
-        self.destination = coord
+        self.__destination = coord
 
         # default local variables
-        sleeptick = .100
-        distance_threshold = self.threshold
+        sleep_tick = .100
+        distance_threshold = self.__threshold
         previous_locations = []
 
-        self.cancel_early = False
+        self.__cancel_early = False
 
-        # if we are alread there, don't do anything
+        # if we are already there, don't do anything
         if self.distance_to_destination() <= distance_threshold:
-            self.destination = None
+            self.__destination = None
             self.get_reached_point_callback()
-            self.gpg.set_speed(self.speed)
+            self.gpg.set_speed(self.__speed)
             return
 
         # prep to move
         self.turn_to_face(coord)
-        time.sleep(sleeptick)
+        time.sleep(sleep_tick)
         dst = self.distance_to_destination()
         self.__determine_speed(dst)
 
         # time to move
         self.gpg.forward()
-        time.sleep(sleeptick)
+        time.sleep(sleep_tick)
 
         # while we haven't found our destination
         while dst >= distance_threshold:
 
             # if we need to cancel early
-            if self.cancel_early:
+            if self.__cancel_early:
                 self.gpg.stop()
-                self.cancel_early = False
-                self.gpg.set_speed(self.speed)
+                self.__cancel_early = False
+                self.gpg.set_speed(self.__speed)
                 return
 
             # update distance
@@ -217,10 +223,10 @@ class GPS(Thread):
 
             # slow down if needed
             self.__determine_speed(dst)
-            time.sleep(sleeptick)
+            time.sleep(sleep_tick)
 
             # prep for rotation re-evaluation
-            previous_locations.append(Vector(self.transform.position))
+            previous_locations.append(Vector(self.__transform.position))
 
             # have we been going straight long enough to determine our own rotation?
             if len(previous_locations) == 2:
@@ -239,7 +245,7 @@ class GPS(Thread):
                     previous_locations = []
 
                 # we are going the wrong way and are lost
-                elif self.__distance(previous_locations[0], self.destination) < self.distance_to_destination():
+                elif self.__distance(previous_locations[0], self.__destination) < self.distance_to_destination():
 
                     # reorient ourselves
                     self.gpg.stop()
@@ -257,8 +263,8 @@ class GPS(Thread):
             # print debug info
             if self.__debug:
                 print("distance", dst)
-                print("current position", self.transform.position)
-                print("current rotation", self.transform.rotation)
+                print("current position", self.__transform.position)
+                print("current rotation", self.__transform.rotation)
                 print("destination", coord)
                 print("************************")
 
@@ -266,35 +272,35 @@ class GPS(Thread):
         self.gpg.stop()
         self.get_position_callback()
         self.get_reached_point_callback()
-        self.destination = None
-        self.gpg.set_speed(self.speed)
+        self.__destination = None
+        self.gpg.set_speed(self.__speed)
 
     # gps is inaccurate at times, so if we are close we should slowdown to increase fidelity.
     def __determine_speed(self, dst):
         # if we are approaching the destination, slow down for more accuracy
-        if dst <= self.threshold * 10:
-            self.gpg.set_speed(self.speed / 2)
+        if dst <= self.__threshold * 10:
+            self.gpg.set_speed(self.__speed / 2)
         else:
-            self.gpg.set_speed(self.speed)
+            self.gpg.set_speed(self.__speed)
 
     # This method is used to calculate an intercept trajectory with the circle surrounding the destination point.
     # it returns 0 if the trajectory bisects at all (tangents are considered misses)
     # it then return -1 if the current angle is greater, or 1 if it is the opposite
     def __plot_intersection(self):
-        direction = self.transform.position - self.destination
-        vx = math.cos(self.transform.rotation)
-        vy = math.sin(self.transform.rotation)
+        direction = self.__transform.position - self.__destination
+        vx = math.cos(self.__transform.rotation)
+        vy = math.sin(self.__transform.rotation)
         a = pow(vx, 2) + pow(vy, 2)
         b = 2 * (vx * direction.x + vy * direction.y)
-        c = pow(direction.x, 2) + pow(direction.y, 2) - pow(self.threshold / 2, 2)
+        c = pow(direction.x, 2) + pow(direction.y, 2) - pow(self.__threshold / 2, 2)
         det = pow(b, 2) - 4 * a * c
 
         # if it hits somehow
         if det < 0:
             return 0
         else:
-            angle = self.get_angle(self.transform.position, self.destination)
-            angle -= self.transform.rotation
+            angle = self.get_angle(self.__transform.position, self.__destination)
+            angle -= self.__transform.rotation
             if angle < 0:
                 return -1
             else:
@@ -319,11 +325,11 @@ class GPS(Thread):
         tolerable_deviation = 1
 
         # determine how much we need to rotate
-        difference = abs(self.transform.rotation - angle)
+        difference = abs(self.__transform.rotation - angle)
 
         # show debug info
         if self.__debug:
-            print("current rotation: ", self.transform.rotation)
+            print("current rotation: ", self.__transform.rotation)
             print("destination angle: ", angle)
             print("rotation needed: ", difference)
 
@@ -334,7 +340,7 @@ class GPS(Thread):
             self.gpg.set_speed(100)
 
             # if our current angle exceeds the angle we need
-            if self.transform.rotation > angle:
+            if self.__transform.rotation > angle:
 
                 # debug info
                 if self.__debug:
@@ -382,11 +388,11 @@ class GPS(Thread):
                     self.__turn_right(360 - difference)
 
             # we have an accurate reading now.
-            self.gpg.set_speed(self.speed)
+            self.gpg.set_speed(self.__speed)
 
     # rotate to face a specific point
     def turn_to_face(self, coord):
-        angle = self.get_angle(coord, self.transform.position)
+        angle = self.get_angle(coord, self.__transform.position)
         self.turn_to_angle(angle)
 
     # checks for an obstacle and reports its position to a callback
@@ -396,23 +402,23 @@ class GPS(Thread):
         distance = self.distance_sensor.read()
 
         # if it was close enough
-        if distance <= self.minimum_distance:
+        if distance <= self.__minimum_distance:
             # get its position and send to callback
             distance += DISTANCE_FROM_CENTER
             distance = distance / 100
-            x = (math.cos(math.radians(self.transform.rotation)) * distance) + self.transform.position.x
-            y = (math.sin(math.radians(self.transform.rotation)) * distance) + self.transform.position.y
+            x = (math.cos(math.radians(self.__transform.rotation)) * distance) + self.__transform.position.x
+            y = (math.sin(math.radians(self.__transform.rotation)) * distance) + self.__transform.position.y
 
             pos = Vector(x, y)
             self.get_obstacle_callback(pos)
         else:
-            distance = self.minimum_distance
+            distance = self.__minimum_distance
 
             # get its position and send to callback
             distance += DISTANCE_FROM_CENTER
             distance = distance / 100
-            x = (math.cos(math.radians(self.transform.rotation)) * distance) + self.transform.position.x
-            y = (math.sin(math.radians(self.transform.rotation)) * distance) + self.transform.position.y
+            x = (math.cos(math.radians(self.__transform.rotation)) * distance) + self.__transform.position.x
+            y = (math.sin(math.radians(self.__transform.rotation)) * distance) + self.__transform.position.y
 
             pos = Vector(x, y)
             self.get_no_obstacle_callback(pos)

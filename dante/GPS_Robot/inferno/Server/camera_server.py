@@ -3,7 +3,7 @@ from picamera import PiCamera
 import io
 from threading import Thread
 import struct
-import time
+
 
 # this class maintains a small video server that streams from the camera on a pi
 class VideoServer(Thread):
@@ -14,7 +14,7 @@ class VideoServer(Thread):
         # get the connection
         print("awaiting camera connection")
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.bind(("dante.local",10001))
+        self.server.bind(("dante.local", 10001))
         self.server.listen(0)
         self.connection = self.server.accept()[0].makefile('wb')
         print("Camera Server connected!")
@@ -27,7 +27,6 @@ class VideoServer(Thread):
 
     # Run the thread
     def run(self):
-
 
         try:
             # create our IO stream
@@ -51,7 +50,7 @@ class VideoServer(Thread):
 
                 # we're done with the package
                 self.connection.write(struct.pack('<L', 0))
-        except Exception as ex:
+        except:
             print("Clumsy Exit")
         finally:
             self.connection.flush()
