@@ -10,7 +10,7 @@ import io
 import numpy as np
 
 
-# TODO comment everything
+# This class handles GUI and controller data being sent over a connection along with responses received from the server.
 class Client(QThread):
     # Signal events
     on_rover_position_changed = pyqtSignal(Vector)
