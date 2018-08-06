@@ -43,7 +43,9 @@ except Exception as e:
     hardware_connected = False
     print("Unknown issue while importing gopigo3")
     print(e)
-class AdvancedGoPiGo3():
+
+
+class AdvancedGoPiGo3:
     """
         this class exists to return some functionatlity from the original gopigo
         and to simplify other aspects of Easygopigo3 and gopigo3 for easy of typing.
@@ -53,30 +55,30 @@ class AdvancedGoPiGo3():
 
 "   """
 
-    def __init__(self, angle_compensation = 0,use_mutex = False):
+    def __init__(self, angle_compensation=0, use_mutex=False):
         self.gpg = easygopigo3.EasyGoPiGo3(use_mutex)
         self.speed = self.gpg.get_speed()
-        self.angle_compensation = angle_compensation #this corrects for the ability to rotate one full circle.
+        self.angle_compensation = angle_compensation # this corrects for the ability to rotate one full circle.
         
     def volt(self):
         return self.gpg.volt()
     '''
-    The folowing methods involve the speed of the robot.
+    The following methods involve the speed of the robot.
 
     '''
     def get_speed(self):
         return self.speed
 
-    def set_speed(self, inspeed):
-        self.gpg.set_speed(inspeed)
+    def set_speed(self, in_speed):
+        self.gpg.set_speed(in_speed)
 
     def reset_speed(self):
         self.gpg.reset_speed()
 
-    def set_left_wheel(self,speed):
+    def set_left_wheel(self, speed):
         self.gpg.set_motor_limits(self.gpg.MOTOR_LEFT, dps=speed)
 
-    def set_right_wheel(self,speed):
+    def set_right_wheel(self, speed):
         self.gpg.set_motor_limits(self.gpg.MOTOR_RIGHT, dps=speed)
 
     '''
@@ -96,7 +98,7 @@ class AdvancedGoPiGo3():
     def rotate_right(self,degrees):
         self.gpg.turn_degrees(abs(self.__rotation_compensation(degrees)))
         
-    def __rotation_compensation(self,degrees):
+    def __rotation_compensation(self, degrees):
         return degrees + (degrees * (self.angle_compensation/360))
 
     def right(self):
@@ -129,12 +131,15 @@ class AdvancedGoPiGo3():
     The following methods involve the lights and LEDS on the gpg board.
     '''
 
-    def led_on(self,id):
-        self.gpg.led_on(id)
-    def led_off(self,id):
-        self.gpg.led_off(id)
+    def led_on(self, led):
+        self.gpg.led_on(led)
+
+    def led_off(self, led):
+        self.gpg.led_off(led)
+
     def open_eyes(self):
         self.gpg.open_eyes()
+
     def close_eyes(self):
         self.gpg.close_eyes()
 

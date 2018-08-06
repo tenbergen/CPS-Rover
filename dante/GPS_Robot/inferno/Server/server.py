@@ -62,15 +62,13 @@ class Server:
 
         # initialize gps
         self.gps_queue = queue.Queue()
-        self.gps = GPS(self.gps_queue, 10,1, self.gpg, debug_mode=False)
+        self.gps = GPS(10, 1, self.gpg, q=self.gps_queue, debug_mode=False)
         self.gps.minimum_distance = 50
         self.gps_can_run = True
         self.gps.set_obstacle_callback(self.obstacle_found)
         self.gps.set_position_callback(self.rover_position_change)
         self.gps.set_no_obstacle_callback(self.on_no_obstacles)
         self.gps.set_reached_point_callback(self.destination_reached)
-        
-
 
         # start remote control thread
         self.remote_can_run = False
@@ -86,7 +84,7 @@ class Server:
         self.conn, self.addr = self.socket.accept()
         print("Successful connection from ", self.addr)
 
-        #start the video server
+        # start the video server
         self.video = VideoServer()
         self.video.start()
         self.gps.start()
@@ -98,8 +96,8 @@ class Server:
             # empty the queue and send all the data to the client
             while not self.send_queue.empty():
                 data = self.send_queue.get_nowait()
-                #print(data)
                 self.conn.send(str.encode(data))
+
             # wait a moment for a response
             received, _, _ = select.select([self.conn], [], [], .1)
 
@@ -108,10 +106,8 @@ class Server:
                 data = self.conn.recv(1024).decode('utf-8').split()
                 self.parse_data(data)
 
-        # close up connections
-        #self.socket.close()
-
-    # this method parses the incoming data commands.  Each command comprises of atleast one letter that is removed from the list.
+    # this method parses the incoming data commands.  Each command comprises of atleast one letter that is removed
+    # from the list.
     def parse_data(self, data):
 
         while len(data) > 0:
@@ -123,8 +119,7 @@ class Server:
                 x = int(data.pop(0))
                 y = int(data.pop(0))
                 node_type = int(data.pop(0))
-                self.node_changed(x,y,node_type)
-
+                self.node_changed(x, y, node_type)
 
             # destination change
             elif command == 'D':
@@ -159,6 +154,7 @@ class Server:
             elif command == 'S':
                 self.gps.cancel_early = True
                 self.gps_can_run = False
+                self.gpg.stop()
             elif command == 'Q':
                 print("Quitting")
                 self.can_run = False
@@ -196,31 +192,27 @@ class Server:
                 self.gpg.led_off(1)
                 self.gpg.close_eyes()
                 
-    def node_changed(self,x,y,node_type):
+    def node_changed(self, x, y, node_type):
         self.grid.set_node(x, y, node_type)
         if node_type == OBSTACLE:
             self.add_obstacle(self.grid.nodes[x][y])
-            #self.send_message("N " + str(node.gridPos.x) + " " + str(node.gridPos.y) + " 0")
         self.find_path()
 
-    def node_changed(self,node,node_type):
+    def node_changed_to_open(self, node, node_type):
         self.grid.set_node_type(node, node_type)
-        #self.add_obstacle(self.grid.nodes[node.gridPos.x][node.gridPos.y])
         self.send_message("N " + str(node.gridPos.x) + " " + str(node.gridPos.y) + " 0")
         self.find_path()
 
     def on_no_obstacles(self,position):
         if position.x > 0 and position.y > 0 and position.x <= self.grid_width and position.y <= self.grid_height:
             node = self.grid.node_from_global_coord(position)
-            path,_ = self.grid.find_path(self.rover_position,node,False)
-            #print(path)
+            path, _ = self.grid.find_path(self.rover_position, node, False)
+
             for p in path:
                 if p.node_type != 0:
                     if p.gridPos.x > 0 and p.gridPos.y > 0 and p.gridPos.x < self.grid.nodes_in_x and p.gridPos.y < self.grid.nodes_in_y:
-                        #print("node changed",p.gridPos.x,p.gridPos.y)
-                        self.node_changed(p,0)
-                    
-    
+                        self.node_changed_to_open(p, 0)
+
     def rover_position_change(self, position):
         # We only care about it if it is in the grid.
         if position.x > 0 and position.y > 0 and position.x <= self.grid_width and position.y <= self.grid_height:
@@ -238,13 +230,12 @@ class Server:
                 # we need a new full route.
                 self.current_path, _ = self.grid.find_path(self.rover_position, self.current_destination)
                 self.send_path()
-                
 
                 # send info along
-                self.send_message("R " + str(node.gridPos.x) + " "+ str(node.gridPos.y))
+                self.send_message("R " + str(node.gridPos.x) + " " + str(node.gridPos.y))
 
-    def destination_reached(self,pos):
-        print("callback-point reached",pos)
+    def destination_reached(self, pos):
+        print("callback-point reached", pos)
 
         # send the next point to the gps
         self.next_gps_point()
@@ -270,15 +261,14 @@ class Server:
                 # we have an obstacle!
                 self.add_obstacle(node)
 
-                path,_ = self.grid.find_path(self.rover_position,node,False)
+                path, _ = self.grid.find_path(self.rover_position, node, False)
                 path.pop(-1)
                 for p in path:
                     if p.node_type != 0:
                         if p.gridPos.x > 0 and p.gridPos.y > 0 and p.gridPos.x < self.grid.nodes_in_x and p.gridPos.y < self.grid.nodes_in_y:
-                            #print("node changed",p.gridPos.x,p.gridPos.y)
-                            self.node_changed(p,0)
+                            self.node_changed_to_open(p, 0)
 
-    def add_obstacle(self, node, send_message=True):
+    def add_obstacle(self, node):
         # if we have a valid node to work with.
         if node.node_type != 1 and node != self.rover_position:
 
@@ -286,7 +276,7 @@ class Server:
             self.grid.set_node_type(node, 1)
             border = self.grid.all_borders
             self.send_message("N " + str(node.gridPos.x) + " " + str(node.gridPos.y) + " 1")
-            print("N",node.gridPos.x,node.gridPos.y)
+            print("N", node.gridPos.x,node.gridPos.y)
 
             # IF there is a destination in play and it is hit by the border, it needs to be cleared.
             if self.current_destination is not None:
@@ -326,14 +316,13 @@ class Server:
             self.gps_queue.put(destination)
             self.send_simple_path()
 
-
     def send_message(self, message):
         # puts a message in the send queue
         self.send_queue.put((" " + message))
 
     def send_path(self):
         # sends the full path to the client
-        if len(self.current_path) >0:
+        if len(self.current_path) > 0:
             message = "FP "
             for p in self.current_path:
                 message += p.__str__() + " "
@@ -358,6 +347,7 @@ if __name__ == "__main__":
         print(e)
         print(traceback.format_exc())
     finally:
+        # noinspection PyUnboundLocalVariable
         server.conn.close()
         server.socket.shutdown(socket.SHUT_RDWR)
         server.socket.close()

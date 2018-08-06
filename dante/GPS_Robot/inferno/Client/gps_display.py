@@ -3,12 +3,18 @@ from PyQt5.QtWidgets import QApplication,QMainWindow,QPushButton,QGroupBox,QGrid
 from PyQt5.QtCore import Qt,QRect,pyqtSlot
 from PyQt5.QtGui import QPixmap
 from grid import *
-from vector import *
 from queue import Queue
 from client import *
 import sys
 import traceback
 import time
+from vector import Vector
+
+#TODO give controller the ability to enable/disable camera, auto/manual and gohome
+#TODO change the way grids save/load.  Add protocol to send over socket
+#TODO make grid neighbors a calculation to allow for lower impact on RAM
+#TODO change grid_panel to function using mouse location and painting squares
+
 
 #Mouse states
 MOUSE_MODE = 1
@@ -81,21 +87,19 @@ class App(QMainWindow):
         self.client.on_node_changed.connect(self.on_node_changed)
         self.client.on_simple_path_changed.connect(self.on_simple_path_changed)
         self.client.on_path_changed.connect(self.on_path_changed)
-        self.remote_on = False      #TODO use this for when remote control is re-implemented.
-
-
+        self.remote_on = False
 
         #create the actual GUI
-        self.initUI()
+        self.init_ui()
 
         #start the video stream
         self.stream = VideoStream()
-        self.stream.changePixmap.connect(self.setImage)
-        self.stream.start()
+        self.stream.changePixmap.connect(self.set_image)
 
     #actually builds the GUI
-    def initUI(self):
-        #TODO add button that appears only when there currently isn't a connection
+    # noinspection PyArgumentList
+    def init_ui(self):
+
         #base effects
         self.setWindowTitle(self.title)
         self.setGeometry(self.left,self.top,self.width,self.height)
@@ -142,18 +146,21 @@ class App(QMainWindow):
         gridl.addWidget(self.add_destination_button,1,0)
         gridl.addWidget(self.add_home_button,1,1)
         self.mouse_layout.setLayout(gridl)
+        self.mouse_layout.setEnabled(False)
 
         #clear destination button
         self.clear_destination_button = QPushButton(self)
         self.clear_destination_button.setText("Clear Destinations")
         self.clear_destination_button.clicked.connect(self.on_clear_destination_clicked)
         self.button_panel.addWidget(self.clear_destination_button)
+        self.clear_destination_button.setEnabled(False)
 
         #clear obstacles
         self.clear_obstacles_button = QPushButton(self)
         self.clear_obstacles_button.setText("Clear All Obstacles")
         self.clear_obstacles_button.clicked.connect(self.on_clear_obstacles)
         self.button_panel.addWidget(self.clear_obstacles_button)
+        self.clear_obstacles_button.setEnabled(False)
 
         # save and load buttons
         #self.save_button = QPushButton(self)
@@ -168,34 +175,38 @@ class App(QMainWindow):
         #self.button_panel.addLayout(self.save_load_layout)
 
         #connect button
-        #self.connect_button = QPushButton(self)
-        #self.connect_button.setText("Connect")
-        #self.connect_button.clicked.connect(self.client.connect_to_server)
-        #self.button_panel.addWidget(self.connect_button)
+        self.connect_button = QPushButton(self)
+        self.connect_button.setText("Connect")
+        self.connect_button.clicked.connect(self.on_connect)
+        self.button_panel.addWidget(self.connect_button)
         
         #turn cam on/off button
         self.cam_on_button = QPushButton(self)
         self.cam_on_button.setText("Turn Video Off")
         self.cam_on_button.clicked.connect(self.on_cam_on_off_clicked)
         self.button_panel.addWidget(self.cam_on_button)
+        self.cam_on_button.setEnabled(False)
 
         #autodrive Button
         self.autodrive_button = QPushButton(self)
         self.autodrive_button.setText("Switch To Manual")
         self.autodrive_button.clicked.connect(self.on_autodrive_clicked)
         self.button_panel.addWidget(self.autodrive_button)
+        self.autodrive_button.setEnabled(False)
 
         #go home Button
         self.go_home_button = QPushButton(self)
         self.go_home_button.setText("Go Home")
         self.go_home_button.clicked.connect(self.on_go_home_clicked)
         self.button_panel.addWidget(self.go_home_button)
+        self.go_home_button.setEnabled(False)
 
         #Start/Stop Button
         self.start_stop_button = QPushButton(self)
         self.start_stop_button.setText("Start")
         self.start_stop_button.clicked.connect(self.on_start_stop_clicked)
         self.button_panel.addWidget(self.start_stop_button)
+        self.start_stop_button.setEnabled(False)
         
         #move panel to position!
         self.button_panel.setGeometry(QRect(600, 150, 300, 200))
@@ -205,103 +216,112 @@ class App(QMainWindow):
         self.video.move(600,300)
         self.video.resize(640,480)
 
+    # noinspection PyArgumentList
     @pyqtSlot(QImage)
-    def setImage(self,image):
+    def set_image(self, image):
         self.video.setPixmap(QPixmap.fromImage(image))
-        
-    #when the window closes
+
+    def on_connect(self):
+        try:
+            self.client.connect_to_server()
+            self.stream.connect_to_server()
+        except Exception as e:
+            print(e)
+        finally:
+            self.client.start()
+            self.stream.start()
+            self.mouse_layout.setEnabled(True)
+            self.clear_destination_button.setEnabled(True)
+            self.clear_obstacles_button.setEnabled(True)
+            self.cam_on_button.setEnabled(True)
+            self.autodrive_button.setEnabled(True)
+            self.start_stop_button.setEnabled(True)
+            self.go_home_button.setEnabled(True)
+
+    # when the window closes
     def closeEvent(self,event):
         print("program closing")
 
-        #close the client
+        # close the client
         self.send_queue.put("Q")
         self.client.can_run = False
         self.stream.can_run = False
-        time.sleep(.1)
+        time.sleep(1)
         self.client.quit()
         self.client.quit()
 
-    #allows us to change the window color
+    # allows us to change the window color
     def set_color(self,color):
         p = self.palette()
         p.setColor(self.backgroundRole(),color)
         self.setPalette(p)
 
-    #get the mouse mode      
+    # get the mouse mode
     def get_mouse_mode(self):
         return self.MOUSE_MODE
 
     # when all the obstacles need to be cleared
     def on_clear_obstacles(self):
-        try:
-            temp = list(self.grid.all_obstacles)
-            while len(temp) >0:
-                self.on_obstacle_removed(temp.pop(0))
-            self.grid_panel.redraw_grid()
-        except Exception as ex:
-            print(traceback.format_exc())
+        temp = list(self.grid.all_obstacles)
+        while len(temp) >0:
+            self.on_obstacle_removed(temp.pop(0))
+        self.grid_panel.redraw_grid()
 
-
-
-    #updates the simple path
+    # updates the simple path
+    # noinspection PyArgumentList
     @pyqtSlot(list)
     def on_simple_path_changed(self,path):
         temp = []
         for p in path:
-            temp.append(self.grid.get_node(p.x,p.y))
+            temp.append(self.grid.get_node(p.x, p.y))
         self.simple_path = temp
         self.grid_panel.redraw_grid()
 
-    #updates the path
+    # updates the path
+    # noinspection PyArgumentList
     @pyqtSlot(list)
     def on_path_changed(self, path):
         temp = []
         for p in path:
-            temp.append(self.grid.get_node(p.x,p.y))
+            temp.append(self.grid.get_node(p.x, p.y))
         self.current_path = temp
         self.grid_panel.redraw_grid()
 
-    #when a node changes
-    @pyqtSlot(Vector,int)
-    def on_node_changed(self,node,node_type):
-        try:
-            self.grid.set_node(node.x,node.y,node_type)
-            print(node.x,node.y,node_type)
-            self.grid_panel.redraw_grid()
-        except Exception as ex:
-            print(ex)
-            print(traceback.format_exc())
+    # when a node changes
+    # noinspection PyArgumentList
+    @pyqtSlot(Vector, int)
+    def on_node_changed(self,node, node_type):
+        self.grid.set_node(node.x,node.y, node_type)
+        print(node.x,node.y, node_type)
+        self.grid_panel.redraw_grid()
 
-    #factory for button click events.
+    # factory for button click events.
     def on_click_event(self,vector):
         grid = self.grid
 
-        #creates a click event for each button on the grid.
+        # creates a click event for each button on the grid.
         def click_event():
-            try:
-                x = vector.x
-                y = vector.y
-                node = grid.nodes[x][y]
-                something_happened = False
-                print("My name is "+node.gridPos.x.__str__() +" "+ node.gridPos.y.__str__())
-                print("My node Type is: "+node.node_type.__str__())
-                print(int(MOUSE_MODE).__str__())
+            x = vector.x
+            y = vector.y
+            node = grid.nodes[x][y]
+            something_happened = False
+            print("My name is "+node.gridPos.x.__str__() +" "+ node.gridPos.y.__str__())
+            print("My node Type is: "+node.node_type.__str__())
+            print(int(MOUSE_MODE).__str__())
 
-                #use the proper mouse event based on the obstacle
-                if MOUSE_MODE == ADD_OBSTACLE:
-                    something_happened = self.on_obstacle_added(node)
-                elif MOUSE_MODE == REMOVE_OBSTACLE:
-                    something_happened = self.on_obstacle_removed(node)
-                elif MOUSE_MODE == ADD_DESTINATION:
-                    something_happened = self.on_destination_added(node)
-                elif MOUSE_MODE == ADD_HOME:
-                    something_happened = self.on_home_added(node)
-                    
-                #if there was a change in the grid, redraw it.
-                if something_happened:
-                    self.grid_panel.redraw_grid()
-            except Exception as ex:
-                print(ex)
+            # use the proper mouse event based on the obstacle
+            if MOUSE_MODE == ADD_OBSTACLE:
+                something_happened = self.on_obstacle_added(node)
+            elif MOUSE_MODE == REMOVE_OBSTACLE:
+                something_happened = self.on_obstacle_removed(node)
+            elif MOUSE_MODE == ADD_DESTINATION:
+                something_happened = self.on_destination_added(node)
+            elif MOUSE_MODE == ADD_HOME:
+                something_happened = self.on_home_added(node)
+
+            #if there was a change in the grid, redraw it.
+            if something_happened:
+                self.grid_panel.redraw_grid()
 
         return click_event
 
@@ -361,8 +381,6 @@ class App(QMainWindow):
     def on_start_stop_clicked(self):
         self.toggle_in_motion()
 
-
-
     #switches the in_motion variable from true to false and vice versa.  It also changes the text of the start/stop button
     def toggle_in_motion(self):
         self.in_motion = not self.in_motion
@@ -374,7 +392,6 @@ class App(QMainWindow):
             self.start_stop_button.setText("Start")
             self.send_queue.put("S")
 
-    #TODO implement camera        
     def on_cam_on_off_clicked(self):
         button = self.cam_on_button
         if button.text() == "Turn Video On":
@@ -406,7 +423,6 @@ class App(QMainWindow):
     #when auto/manual is toggled.        
     def on_autodrive_clicked(self):
 
-        #TODO consider using a boolean for auto drive.
         button = self.autodrive_button
         if button.text() == "Switch To Manual":
             button.setText("Switch To Automatic")
@@ -416,7 +432,8 @@ class App(QMainWindow):
             button.setText("Switch To Manual")
             if self.in_motion:
                 self.on_start_stop_clicked()
-                self.client.remote_on = False
+            self.client.remote_on = False
+            self.send_queue.put("S")
             self.start_stop_button.show()
 
     #When the user tells the robot to go home.  drop everything and go home.        
@@ -437,43 +454,37 @@ class App(QMainWindow):
             self.grid_panel.redraw_grid()
 
     #this is a callback to signify that we have made it to a destination.
+    # noinspection PyArgumentList
     @pyqtSlot()
     def on_point_reached(self):
         print(self.destinations)
-        try:
-            print("point reached - received from server")
-            #if we are at our final destination, we are done.
-            if self.rover_position == self.destinations[0]:
-                if len(self.destinations)>0:
-                    self.destinations.pop(0)
+        print("point reached - received from server")
+        #if we are at our final destination, we are done.
+        if self.rover_position == self.destinations[0]:
+            if len(self.destinations)>0:
+                self.destinations.pop(0)
 
-                if len(self.destinations) >0:
-                    print("Destination reached, going to next destination")
-                    self.send_queue.put(
-                        "D " + str(self.destinations[0].gridPos.x) + " " + str(self.destinations[0].gridPos.y))
-                    self.send_queue.put("GO")
-                else:
-                    print("final destination reached")
-                    self.send_queue.put("S")
-                    if self.in_motion:
-                        self.toggle_in_motion()
+            if len(self.destinations) >0:
+                print("Destination reached, going to next destination")
+                self.send_queue.put(
+                    "D " + str(self.destinations[0].gridPos.x) + " " + str(self.destinations[0].gridPos.y))
+                self.send_queue.put("GO")
+            else:
+                print("final destination reached")
+                self.send_queue.put("S")
+                if self.in_motion:
+                    self.toggle_in_motion()
 
-        except Exception as ex:
-            print(traceback.format_exc())
-
-    #a callback for when the rover's new position is sent.
+    # a callback for when the rover's new position is sent.
+    # noinspection PyArgumentList
     @pyqtSlot(Vector)
     def rover_pos_changed(self,position):
-        try:
-            node = self.grid.get_node(position.x,position.y)
+        node = self.grid.get_node(position.x,position.y)
 
-            #we still only care if it moves it to a new node.
-            if node != self.rover_position:
-                print("rover position changed - Received from server")
-                self.rover_position = node
-        except Exception as ex:
-            print(ex)
-            print(traceback.format_exc())
+        #we still only care if it moves it to a new node.
+        if node != self.rover_position:
+            print("rover position changed - Received from server")
+            self.rover_position = node
 
         self.grid_panel.redraw_grid()
 
@@ -481,25 +492,25 @@ class App(QMainWindow):
     def save(self):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
-        fileName, _ = QFileDialog.getSaveFileName(self,"Save Grid","","All Files (*);;Text Files (*.txt)", options=options)
-        if fileName:
-            print(fileName)
-        realfilename = "your grid.grid"
-        self.grid.save(realfilename)
+        file_name, _ = QFileDialog.getSaveFileName(self,"Save Grid","","All Files (*);;Text Files (*.txt)", options=options)
+        if file_name:
+            print(file_name)
+
+        self.grid.save(file_name)
 
     #opens a load dialog.
     def load(self):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
-        fileName, _ = QFileDialog.getOpenFileName(self,"Load Grid", "","All Files (*);;Python Files (*.py)", options=options)
-        self.grid = Grid.load(fileName)
+        file_name, _ = QFileDialog.getOpenFileName(self,"Load Grid", "","All Files (*);;Python Files (*.py)", options=options)
+        self.grid = Grid.load(file_name)
         self.grid_panel.setParent(None)
         self.grid_panel = None
         self.grid_panel = GridPanel(self,self.grid)
         self.grid_panel.show()
 
 
-#this handles the visual appearence of the grid.
+#this handles the visual appearance of the grid.
 class GridPanel(QGroupBox):
 
     #initialize class
@@ -507,6 +518,7 @@ class GridPanel(QGroupBox):
         super().__init__(parent)
 
         #default settings
+        self.current_color = None
         self.setTitle("Physical Context Map")
         self.grid = grid
         self.buttons = []
@@ -605,15 +617,11 @@ class GridButton(QPushButton):
         self.current_color = color
 
 
-
-
-
 if __name__ == '__main__':
     try:
         app = QApplication(sys.argv)
         ex = App()
         ex.show()
-        ex.client.start()
         sys.exit(app.exec_())
     except Exception as ex:
         traceback.print_exc()
