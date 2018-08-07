@@ -4,7 +4,7 @@ import math
 from vector import Vector
 from threading import Thread
 
-DISTANCE_FROM_CENTER = 0
+DISTANCE_FROM_CENTER = 15
 
 
 # This class serves as a wrapper for marvelmind and gopigo movement.
@@ -126,6 +126,9 @@ class GPS(Thread):
 
     def stop_thread(self):
         self.__thread_done = False
+
+    def set_min_distance(self, dst):
+        self.__minimum_distance = dst
 
     # returns the current distance from the destination
     def distance(self, destination):

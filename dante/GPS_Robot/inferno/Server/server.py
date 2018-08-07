@@ -63,7 +63,7 @@ class Server:
         # initialize gps
         self.gps_queue = queue.Queue()
         self.gps = GPS(10, 1, self.gpg, q=self.gps_queue, debug_mode=False)
-        self.gps.minimum_distance = 50
+        self.gps.set_min_distance(50)
         self.gps_can_run = True
         self.gps.set_obstacle_callback(self.obstacle_found)
         self.gps.set_position_callback(self.rover_position_change)
