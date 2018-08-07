@@ -1,5 +1,6 @@
 from vector import *
 import heapq
+import traceback
 
 OPEN_SPACE = 0
 OBSTACLE = 1
@@ -36,6 +37,7 @@ class Grid:
         self.nodes = [[]]  # 2d array of coordinates
         self.nodes = [[Node(0, 0, 0) for y in range(node_y)] for x in range(node_x)]
         self.__create_grid()
+        Node.grid = self
 
     # This method initializes the grid.  It should be run during the constructor and then never again.
     def __create_grid(self):
@@ -43,31 +45,6 @@ class Grid:
         for x in range(0, self.nodes_in_x):
             for y in range(0, self.nodes_in_y):
                 self.nodes[x][y] = Node(x, y, OPEN_SPACE)
-
-        # assign each node its neighbors.
-        # NOTE, this should probably be removed and have neighbors be calculated as needed.
-        # this uses too much ram as the size increases.
-        for x in range(0, self.nodes_in_x):
-            for y in range(0, self.nodes_in_y):
-                node = self.nodes[x][y]
-                neighbors = []
-                neighbors_with_diagonals = []
-                # for every node, find its neighbors.
-                for ix in range(-1, 2):
-                    for iy in range(-1, 2):
-                        if ix != 0 or iy != 0:
-                            if x + ix >= 0 and x + ix < self.nodes_in_x and iy + y >= 0 and y + iy < self.nodes_in_y:
-                                neighbors_with_diagonals.append(self.nodes[x + ix][y + iy])
-                            else:
-                                neighbors_with_diagonals.append(None)
-                # this doesn't actually work.
-                for n in range(len(neighbors_with_diagonals)):
-                    if n % 2 == 1:
-                        neighbors.append(neighbors_with_diagonals[n])
-                neighbors = list(filter(None, neighbors))
-                neighbors_with_diagonals = list(filter(None, neighbors_with_diagonals))
-                node.set_neighbors(neighbors, False)
-                node.set_neighbors(neighbors_with_diagonals, True)
 
     # get the number of nodes
     def get_num_of_nodes(self):
@@ -349,10 +326,10 @@ class Grid:
 
 # this class represents a single point on a node.
 class Node:
+    grid = None
+
     def __init__(self, x, y, node_type):
         self.gridPos = Vector(x, y)
-        self.__neighbors = []
-        self.__neighbors_with_diagonals = []
         self.node_type = node_type
         self.parent = None
         self.g_cost = 0  # cost to get to this node
@@ -362,19 +339,42 @@ class Node:
     def f_cost(self):
         return self.g_cost + self.h_cost
 
-    # set these neighbors
-    def set_neighbors(self, neighbors, use_diagonals=True):
-        if use_diagonals:
-            self.__neighbors_with_diagonals = neighbors
-        else:
-            self.__neighbors = neighbors
-
     # this returns the nodes neighbors
     def get_neighbors(self, use_diagonals=True):
-        if use_diagonals:
-            return self.__neighbors_with_diagonals
-        else:
-            return self.__neighbors
+        try:
+            if use_diagonals:
+                return self.__neighbors_with_diagonals()
+            else:
+                return self.__neighbors()
+        except:
+            print(traceback.format_exc())
+
+    def __neighbors_with_diagonals(self):
+        temp = []
+        for i in range(-1, 2):
+            for j in range(-1, 2):
+                if self.gridPos.x + i != -1 and self.gridPos.y + j != -1 and self.gridPos.x + i != Node.grid.nodes_in_x and Node.grid.nodes_in_y != self.gridPos.y + j:
+                    print(i, j)
+                    if self != Node.grid.nodes[self.gridPos.x + i][self.gridPos.y + j]:
+                        temp.append(Node.grid.nodes[self.gridPos.x + i][self.gridPos.y + j])
+        return temp
+
+    def __neighbors(self):
+        temp = []
+
+        if self.gridPos.x != 0 and self.gridPos.y != 0:
+            temp.append(Node.grid.nodes[self.gridPos.x-1][self.gridPos.y-1])
+
+        if self.gridPos.x != 0 and self.gridPos.y != Node.grid.nodes_in_y:
+            temp.append(Node.grid.nodes[self.gridPos.x - 1][self.gridPos.y + 1])
+
+        if self.gridPos.x != Node.grid.nodes_in_x and self.gridPos.y != 0:
+            temp.append(Node.grid.nodes[self.gridPos.x + 1][self.gridPos.y - 1])
+
+        if self.gridPos.x != Node.grid.nodes_in_x and self.gridPos.y != Node.grid.nodes_in_y:
+            temp.append(Node.grid.nodes[self.gridPos.x + 1][self.gridPos.y + 1])
+
+        return temp
 
     def __eq__(self, other):
         return self.gridPos.x == other.gridPos.x and self.gridPos.y == other.gridPos.y
