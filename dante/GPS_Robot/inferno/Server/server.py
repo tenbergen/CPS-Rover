@@ -145,6 +145,7 @@ class Server:
                     self.home = node
             # go
             elif command == 'GO':
+                self.find_path()
                 self.gps_can_run = True
                 self.next_gps_point()
 
@@ -291,7 +292,7 @@ class Server:
                 if self.gps_can_run and len(self.simple_path) > 0:
                     destination = self.grid.get_global_coord_from_node(self.simple_path[0])
                     self.gps_queue.queue.clear()
-                    self.gps.cancel_early = True
+                    self.gps.cancel_movement()
                     self.gps_queue.put(destination)
 
     def find_path(self, send_message=True):
@@ -349,8 +350,8 @@ if __name__ == "__main__":
         server.conn.close()
         server.socket.shutdown(socket.SHUT_RDWR)
         server.socket.close()
-        server.video.can_rune = False
+        server.video.can_run = False
         server.video.join(2)
-        server.gps.thread_done = True
-        server.gps.cancel_early = True
+        server.gps.stop_thread()
+        server.gps.cancel_movement()
         server.gps.join()
