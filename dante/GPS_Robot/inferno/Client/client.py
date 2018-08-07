@@ -70,8 +70,11 @@ class Client(QThread):
                 self.handle_controller_events()
         self.socket.close()
 
-    # TODO add control scheme here as comment block
     # this method handles controller events
+    # Left analog stick: control movement
+    # A:                 turn on eyes/LEDS
+    # B:                 stop gpg
+    # Y:                 send gpg home
     def handle_controller_events(self):
         for event in pygame.event.get():
 
@@ -79,11 +82,11 @@ class Client(QThread):
             if event.type == pygame.JOYBUTTONDOWN:
                 if event.button == 0:
                     self.send_message("LON")
-                elif event.button == 6:
-                    running = False  # TODO this should quit the GUI client at some point
-                # elif event.button == 8: #TODO reimplement this
+                # elif event.button == 6:
+                    # running = False  # TODO this should quit the GUI client at some point
+                # elif event.button == 3: # TODO re-implement this
                     # send_message("Home")
-                elif event.button == 11:
+                elif event.button == 1:
                     self.send_message("S")
             # handle axis movement
             elif event.type == pygame.JOYAXISMOTION:
@@ -231,7 +234,7 @@ class VideoStream(QThread):
 
         # treat the socket connection as a file
         connection = self.socket.makefile('rb')
-        cap = cv2.VideoCapture(0)  # TODO try changing this so this isn't needed.
+        cv2.VideoCapture(0)
 
         # while we are allowed to run
         while self.can_run:
