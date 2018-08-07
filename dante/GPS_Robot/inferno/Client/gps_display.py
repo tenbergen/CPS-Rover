@@ -11,7 +11,7 @@ import traceback
 import time
 from vector import Vector
 
-# TODO give controller the ability to enable/disable camera, auto/manual and gohome
+# TODO give controller the ability to enable/disable camera, auto/manual and go home
 # TODO add controller control scheme to the GUI
 # TODO add legend to grid.
 # TODO change the way grids save/load.  Add protocol to send over socket
@@ -62,7 +62,7 @@ class App(QMainWindow):
         self.title = "GPS Robot-Inferno"
         self.left = 10
         self.top = 100
-        self.width = 1000
+        self.width = 1300
         self.height = 800
 
         # create the grid
@@ -119,7 +119,7 @@ class App(QMainWindow):
         # set up for mouse actions
         self.mouse_layout.setTitle("On Click")
         self.mouse_layout.resize(350, 100)
-        self.mouse_layout.move(600, 50)
+        self.mouse_layout.setFixedSize(350, 100)
 
         # layout for mouse actions
         gridl = QGridLayout(self.mouse_layout)
@@ -153,6 +153,7 @@ class App(QMainWindow):
         gridl.addWidget(self.add_home_button, 1, 1)
         self.mouse_layout.setLayout(gridl)
         self.mouse_layout.setEnabled(False)
+        self.button_panel.addWidget(self.mouse_layout)
 
         # clear destination button
         self.clear_destination_button = QPushButton(self)
@@ -214,13 +215,22 @@ class App(QMainWindow):
         self.button_panel.addWidget(self.start_stop_button)
         self.start_stop_button.setEnabled(False)
 
-        # move panel to position!
-        self.button_panel.setGeometry(QRect(600, 150, 300, 200))
+
 
         # create camera stream
+        self.video_layout = QGroupBox(self)
+        self.video_layout.setTitle("Video Stream")
+        temp = QGridLayout(self.video_layout)
         self.video = QLabel(self)
-        self.video.move(600, 300)
+        temp.addWidget(self.video)
+        self.video_layout.setLayout(temp)
+        self.video_layout.setFixedSize(480, 320)
         self.video.resize(640, 480)
+        self.button_panel.addWidget(self.video_layout)
+        self.video_layout.setAlignment(Qt.AlignHCenter)
+
+        # move panel to position!
+        self.button_panel.setGeometry(QRect(600, 50, 500, 700))
 
     # noinspection PyArgumentList
     @pyqtSlot(QImage)
@@ -387,7 +397,8 @@ class App(QMainWindow):
     def on_start_stop_clicked(self):
         self.toggle_in_motion()
 
-    # switches the in_motion variable from true to false and vice versa.  It also changes the text of the start/stop button
+    # switches the in_motion variable from true to false and vice versa.
+    # It also changes the text of the start/stop button
     def toggle_in_motion(self):
         self.in_motion = not self.in_motion
         if self.in_motion:
@@ -445,9 +456,9 @@ class App(QMainWindow):
 
     # When the user tells the robot to go home.  drop everything and go home.
     def on_go_home_clicked(self):
-        if self.home is not None:
+        if self.home is not None and self.rover_position != self.home:
             # set the current destination
-            self.destinations = []
+            self.on_clear_destination_clicked()
             self.destinations.append(self.home)
             node = self.home
             self.send_queue.put("D " + str(node.gridPos.x) + " " + str(node.gridPos.y))
@@ -467,7 +478,7 @@ class App(QMainWindow):
         print(self.destinations)
         print("point reached - received from server")
         # if we are at our final destination, we are done.
-        if self.rover_position == self.destinations[0]:
+        if len(self.destinations) > 0 and self.rover_position == self.destinations[0]:
             if len(self.destinations) > 0:
                 self.destinations.pop(0)
 
@@ -569,21 +580,22 @@ class GridPanel(QGroupBox):
     def redraw_grid(self):
 
         # for every button, determine what its node is, then set its color
+        # the ordering of the if statements determine the the "z-layer" from highest to lowest.
         for b in self.buttons:
             b.determine_type()
-            if len(self.par.destinations) > 0 and b.node == self.par.destinations[0]:
+            if b.node == self.par.rover_position:
+                b.set_color(ROVER)
+
+            elif b.node == self.par.home:
+                b.set_color(HOME)
+
+            elif len(self.par.destinations) > 0 and b.node == self.par.destinations[0]:
                 b.set_color(DESTINATION)
                 b.setText("")
 
             elif len(self.par.destinations) > 1 and self.par.destinations.__contains__(b.node):
                 b.set_color(FUTURE_DESTINATION)
                 b.setText(str(self.par.destinations.index(b.node)))
-
-            elif b.node == self.par.rover_position:
-                b.set_color(ROVER)
-
-            elif b.node == self.par.home:
-                b.set_color(HOME)
 
             elif self.par.simple_path.__contains__(b.node) and not self.par.remote_on:
                 b.set_color(SIMPLE_PATH)
