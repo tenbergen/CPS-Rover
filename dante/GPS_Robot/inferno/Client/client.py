@@ -8,6 +8,7 @@ import struct
 import cv2
 import io
 import numpy as np
+import traceback
 
 
 # This class handles GUI and controller data being sent over a connection along with responses received from the server.
@@ -18,6 +19,9 @@ class Client(QThread):
     on_node_changed = pyqtSignal(Vector, int)
     on_path_changed = pyqtSignal(list)
     on_simple_path_changed = pyqtSignal(list)
+    on_camera_button_pressed = pyqtSignal()
+    on_go_home_pressed = pyqtSignal()
+    on_auto_switch = pyqtSignal()
 
     def __init__(self, send_queue):
         QThread.__init__(self)
@@ -66,8 +70,8 @@ class Client(QThread):
                 self.send_message(data)
 
             # if the controller is active, send pygame events
-            if self.remote_on:
-                self.handle_controller_events()
+            self.handle_controller_events()
+
         self.socket.close()
 
     # this method handles controller events
@@ -75,79 +79,88 @@ class Client(QThread):
     # A:                 turn on eyes/LEDS
     # B:                 stop gpg
     # Y:                 send gpg home
+    # X:                 Camera on/off
+    # start:             turn auto on/off
     def handle_controller_events(self):
-        for event in pygame.event.get():
+        try:
+            for event in pygame.event.get():
+                if event.type == pygame.JOYBUTTONDOWN:
+                    if event.button == 7:
+                        self.on_auto_switch.emit()
+                if self.remote_on:
+                    # handle button presses
+                    if event.type == pygame.JOYBUTTONDOWN:
+                        if event.button == 0:
+                            self.send_message("LON")
+                        elif event.button == 1:
+                            self.send_message("S")
+                        elif event.button == 2:
+                            self.on_camera_button_pressed.emit()
+                        elif event.button == 3:
+                            self.on_go_home_pressed.emit()
 
-            # handle button presses
-            if event.type == pygame.JOYBUTTONDOWN:
-                if event.button == 0:
-                    self.send_message("LON")
-                # elif event.button == 6:
-                    # running = False  # TODO this should quit the GUI client at some point
-                # elif event.button == 3: # TODO re-implement this
-                    # send_message("Home")
-                elif event.button == 1:
-                    self.send_message("S")
-            # handle axis movement
-            elif event.type == pygame.JOYAXISMOTION:
-                if 0 != self.joysticks[0].get_axis(0) or 0 != self.joysticks[0].get_axis(1):
-                    x = float(self.joysticks[0].get_axis(0))
-                    y = float(self.joysticks[0].get_axis(1))
-                    cur_x = 0
-                    cur_y = 0
-                    if -0.03 < x < 0.03 and -0.03 < y < 0.03:
-                        # stopped
-                        cur_x = 0
-                        cur_y = 0
-                    elif -0.03 < y < 0.03:
-                        # turning
-                        if x < 0:
+                    # handle axis movement
+                    elif event.type == pygame.JOYAXISMOTION:
+                        if 0 != self.joysticks[0].get_axis(0) or 0 != self.joysticks[0].get_axis(1):
+                            x = float(self.joysticks[0].get_axis(0))
+                            y = float(self.joysticks[0].get_axis(1))
                             cur_x = 0
-                            cur_y = int(y * 250)
-                        else:
-                            cur_x = int(x * 250)
                             cur_y = 0
-                    elif -0.03 < x < 0.03:
-                        # straight
-                        cur_x = int(y * 250)
-                        cur_y = int(y * 250)
-                    else:
-                        # diagonal
-                        if x < 0.03 and y < 0.03:
-                            cur_y = - int((abs(x) + abs(y)) * 250)
-                            if cur_y < -250:
-                                cur_y = -250
-                            cur_x = int((x - y) * cur_y)
-                            cur_x = - ((cur_x + cur_y) / 2)
-                        elif x < 0.03 < y:
-                            cur_y = int((abs(x) + abs(y)) * 250)
-                            if cur_y > 250:
-                                cur_y = 250
-                            cur_x = int((x + y) * cur_y)
-                            cur_x = ((cur_x + cur_y) / 2)
-                        elif x > 0.03 > y:
-                            cur_x = - int((abs(x) + abs(y)) * 250)
-                            if cur_x < -250:
-                                cur_x = -250
-                            cur_y = int((x + y) * 250)
-                            cur_y = ((cur_y - 250) / 2)
-                        elif x > 0.03 and y > 0.03:
-                            cur_x = int((abs(x) + abs(y)) * 250)
-                            if cur_x > 250:
-                                cur_x = 250
-                            cur_y = int((y - x) * cur_x)
-                            cur_y = ((cur_y + cur_x) / 2)
-                    self.send_message("M " + str(cur_x) + " " + str(cur_y))
+                            if -0.03 < x < 0.03 and -0.03 < y < 0.03:
+                                # stopped
+                                cur_x = 0
+                                cur_y = 0
+                            elif -0.03 < y < 0.03:
+                                # turning
+                                if x < 0:
+                                    cur_x = 0
+                                    cur_y = int(y * 250)
+                                else:
+                                    cur_x = int(x * 250)
+                                    cur_y = 0
+                            elif -0.03 < x < 0.03:
+                                # straight
+                                cur_x = int(y * 250)
+                                cur_y = int(y * 250)
+                            else:
+                                # diagonal
+                                if x < 0.03 and y < 0.03:
+                                    cur_y = - int((abs(x) + abs(y)) * 250)
+                                    if cur_y < -250:
+                                        cur_y = -250
+                                    cur_x = int((x - y) * cur_y)
+                                    cur_x = - ((cur_x + cur_y) / 2)
+                                elif x < 0.03 < y:
+                                    cur_y = int((abs(x) + abs(y)) * 250)
+                                    if cur_y > 250:
+                                        cur_y = 250
+                                    cur_x = int((x + y) * cur_y)
+                                    cur_x = ((cur_x + cur_y) / 2)
+                                elif x > 0.03 > y:
+                                    cur_x = - int((abs(x) + abs(y)) * 250)
+                                    if cur_x < -250:
+                                        cur_x = -250
+                                    cur_y = int((x + y) * 250)
+                                    cur_y = ((cur_y - 250) / 2)
+                                elif x > 0.03 and y > 0.03:
+                                    cur_x = int((abs(x) + abs(y)) * 250)
+                                    if cur_x > 250:
+                                        cur_x = 250
+                                    cur_y = int((y - x) * cur_x)
+                                    cur_y = ((cur_y + cur_x) / 2)
+                            self.send_message("M " + str(cur_x) + " " + str(cur_y))
 
-            # handle button release
-            elif event.type == pygame.JOYBUTTONUP:
-                if event.button == 13 or event.button == 14 or event.button == 15 or event.button == 16:
-                    self.send_message("S")
-                elif event.button == 0:
-                    self.send_message("LOFF")
+                    # handle button release
+                    elif event.type == pygame.JOYBUTTONUP:
+                        if event.button == 13 or event.button == 14 or event.button == 15 or event.button == 16:
+                            self.send_message("S")
+                        elif event.button == 0:
+                            self.send_message("LOFF")
 
-            if not self.remote_on:
-                break
+                    if not self.remote_on:
+                        break
+        except:
+            print(traceback.format_exc())
 
     # Parses incoming data to send back to the GUI
     def parse_data(self, data):

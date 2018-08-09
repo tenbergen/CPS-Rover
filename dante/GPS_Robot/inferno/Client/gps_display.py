@@ -11,13 +11,10 @@ import traceback
 import time
 from vector import Vector
 
-# TODO give controller the ability to enable/disable camera, auto/manual and go home
 # TODO add controller control scheme to the GUI
 # TODO add legend to grid.
 # TODO change the way grids save/load.  Add protocol to send over socket
-# TODO make grid neighbors a calculation to allow for lower impact on RAM
 # TODO change grid_panel to function using mouse location and painting squares
-
 
 # Mouse states
 MOUSE_MODE = 1
@@ -93,6 +90,9 @@ class App(QMainWindow):
         self.client.on_node_changed.connect(self.on_node_changed)
         self.client.on_simple_path_changed.connect(self.on_simple_path_changed)
         self.client.on_path_changed.connect(self.on_path_changed)
+        self.client.on_camera_button_pressed.connect(self.on_cam_on_off_clicked)
+        self.client.on_go_home_pressed.connect(self.on_go_home_clicked)
+        self.client.on_auto_switch.connect(self.on_autodrive_clicked)
         self.remote_on = False
 
         # create the actual GUI
@@ -215,22 +215,21 @@ class App(QMainWindow):
         self.button_panel.addWidget(self.start_stop_button)
         self.start_stop_button.setEnabled(False)
 
-
-
         # create camera stream
         self.video_layout = QGroupBox(self)
         self.video_layout.setTitle("Video Stream")
         temp = QGridLayout(self.video_layout)
         self.video = QLabel(self)
         temp.addWidget(self.video)
+        temp.setSpacing(0)
         self.video_layout.setLayout(temp)
-        self.video_layout.setFixedSize(480, 320)
-        self.video.resize(640, 480)
+        self.video_layout.setFixedSize(440, 320)
+        self.video.resize(480, 320)
         self.button_panel.addWidget(self.video_layout)
-        self.video_layout.setAlignment(Qt.AlignHCenter)
+        self.video_layout.setAlignment(Qt.AlignVCenter)
 
         # move panel to position!
-        self.button_panel.setGeometry(QRect(600, 50, 500, 700))
+        self.button_panel.setGeometry(QRect(600, 5, 440, 700))
 
     # noinspection PyArgumentList
     @pyqtSlot(QImage)
@@ -307,9 +306,14 @@ class App(QMainWindow):
     # noinspection PyArgumentList
     @pyqtSlot(Vector, int)
     def on_node_changed(self, node, node_type):
-        self.grid.set_node(node.x, node.y, node_type)
-        print(node.x, node.y, node_type)
-        self.grid_panel.redraw_grid()
+        try:
+            self.grid.set_node(node.x, node.y, node_type)
+            print(node.x, node.y, node_type)
+            self.grid_panel.redraw_grid()
+            if node_type ==1:
+                self.validate_destinations(self.grid.get_node(node.x, node.y))
+        except:
+            print(traceback.format_exc())
 
     # factory for button click events.
     def on_click_event(self, vector):
@@ -351,22 +355,25 @@ class App(QMainWindow):
             self.grid.set_node_type(node, 1)
             border = self.grid.all_borders
 
-            # IF there is a destination in play and it is hit by the border, it needs to be cleared.
-            if len(self.destinations) > 0:
-                if border.__contains__(self.destinations[0]):
-                    self.destinations.pop(0)
-
-                    if len(self.destinations) > 0:
-                        self.send_queue.put(
-                            "D " + str(self.destinations[0].gridPos.x) + " " + str(self.destinations[0].gridPos.y))
-                    else:
-                        self.current_path = []
-                        self.simple_path = []
-                        self.send_queue.put("D -1 -1")
-
-            self.send_queue.put("N " + str(node.gridPos.x) + " " + str(node.gridPos.y) + " " + str(1))
+            self.validate_destinations(node)
             return True
         return False
+
+    def validate_destinations(self,node):
+        # IF there is a destination in play and it is hit by the border, it needs to be cleared.
+        if len(self.destinations) > 0:
+            if border.__contains__(self.destinations[0]) or node == self.destinations[0]:
+                self.destinations.pop(0)
+
+                if len(self.destinations) > 0:
+                    self.send_queue.put(
+                        "D " + str(self.destinations[0].gridPos.x) + " " + str(self.destinations[0].gridPos.y))
+                else:
+                    self.current_path = []
+                    self.simple_path = []
+                    self.send_queue.put("D -1 -1")
+
+                self.send_queue.put("N " + str(node.gridPos.x) + " " + str(node.gridPos.y) + " " + str(1))
 
     # if an obstacle was removed from the map we need to recalculate our path and borders.
     def on_obstacle_removed(self, node):
@@ -399,6 +406,7 @@ class App(QMainWindow):
 
     # switches the in_motion variable from true to false and vice versa.
     # It also changes the text of the start/stop button
+
     def toggle_in_motion(self):
         self.in_motion = not self.in_motion
         if self.in_motion:
@@ -409,6 +417,8 @@ class App(QMainWindow):
             self.start_stop_button.setText("Start")
             self.send_queue.put("S")
 
+    # noinspection PyArgumentList
+    @pyqtSlot()
     def on_cam_on_off_clicked(self):
         button = self.cam_on_button
         if button.text() == "Turn Video On":
@@ -439,6 +449,8 @@ class App(QMainWindow):
         self.grid_panel.buttons[count].setText("")
 
     # when auto/manual is toggled.
+    # noinspection PyArgumentList
+    @pyqtSlot()
     def on_autodrive_clicked(self):
 
         button = self.autodrive_button
@@ -455,6 +467,8 @@ class App(QMainWindow):
             self.start_stop_button.show()
 
     # When the user tells the robot to go home.  drop everything and go home.
+    # noinspection PyArgumentList
+    @pyqtSlot()
     def on_go_home_clicked(self):
         if self.home is not None and self.rover_position != self.home:
             # set the current destination
@@ -561,8 +575,8 @@ class GridPanel(QGroupBox):
 
         # set the grid up.
         self.setLayout(layout)
-        self.move(20, 20)
-        self.resize(500, 700)
+        self.move(10, 15)
+        self.setFixedSize(500, 650)
         self.setAutoFillBackground(True)
         self.set_color(Qt.white)
 
