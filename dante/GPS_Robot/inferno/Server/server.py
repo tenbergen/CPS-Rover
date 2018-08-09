@@ -61,11 +61,11 @@ class Server:
         self.can_run = True
         self.rover_position = self.grid.get_node(0, 0)
         self.current_destination = None
-        self.home = self.grid.get_node(0, 0)
+        self.home = self.grid.get_node(1, 1)
         self.current_path = []
         self.simple_path = []
-        self.status = IDLE
-        self.mode = AUTO
+        self.mode = 0
+        self.status = 0
 
         # initialize the gpg
         self.gpg = AdvancedGoPiGo3(25, True)
@@ -76,9 +76,26 @@ class Server:
                 "Critical! voltage is very low, please charge the batteries before continuing!  You have been warned!")
         elif volt < 9:
             print("Warning, voltage is getting low, impaired performance is expected.")
+        self.gpg.set_eye_color(RED)
+        self.gpg.open_eyes()
         
         # initialize send queue
         self.send_queue = queue.Queue()
+
+        # initialize the socket
+        print("Awaiting connection")
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        address = (HOST, PORT)
+        self.socket.bind(address)
+        self.socket.listen(1)
+
+        #set up states
+        self.change_status(IDLE)
+        self.change_mode(AUTO)
+
+        # get the connection
+        self.conn, self.addr = self.socket.accept()
+        print("Successful connection from ", self.addr)
 
         # initialize gps
         self.gps_queue = queue.Queue()
@@ -94,21 +111,11 @@ class Server:
         # start remote control thread
         self.remote_can_run = False
 
-        # initialize the socket
-        print("Awaiting connection")
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        address = (HOST, PORT)
-        self.socket.bind(address)
-        self.socket.listen(1)
-
-        # get the connection
-        self.conn, self.addr = self.socket.accept()
-        print("Successful connection from ", self.addr)
-
         # start the video server
         self.video = VideoServer()
         self.video.start()
         self.gps.start()
+
 
     # this method manages incoming and outgoing commands
     def manage_commands(self):
@@ -394,17 +401,16 @@ class Server:
 
     def change_status(self, status):
         self.status = status
-        self.send_status()
         if status == IDLE:
             self.gpg.set_left_eye_color(BLUE)
         elif status == TO_POINT:
             self.gpg.set_left_eye_color(GREEN)
         elif status == TO_HOME:
             self.gpg.set_left_eye_color(YELLOW)
+        self.gpg.open_left_eye()
+        self.send_status()
 
     def change_mode(self, mode):
-        self.mode = mode
-        self.gpg.open_eyes()
         if mode == AUTO:
             self.gpg.set_right_eye_color(CYAN)
         elif mode == SIM:
@@ -412,6 +418,11 @@ class Server:
         elif mode == MAN:
             self.gpg.set_eye_color(PURPLE)
             self.gpg.close_left_eye()
+        self.gpg.open_eyes()
+        if self.mode == MAN:
+            self.open_left_eye()
+        self.mode = mode
+            
 
 if __name__ == "__main__":
     try:
@@ -431,3 +442,4 @@ if __name__ == "__main__":
         server.gps.stop()
         server.gps.cancel_movement()
         server.gps.join()
+        server.gpg.close_eyes()
