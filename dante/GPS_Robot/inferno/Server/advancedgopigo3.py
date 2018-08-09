@@ -116,7 +116,7 @@ class AdvancedGoPiGo3:
     def stop(self):
         self.gpg.stop()
         
-    def drive_cm(self,distance, blocking=True):
+    def drive_cm(self, distance, blocking=True):
         self.gpg.drive_cm(distance, blocking)
 
     def drive_inches(self, dist, blocking=True):
@@ -142,4 +142,25 @@ class AdvancedGoPiGo3:
 
     def close_eyes(self):
         self.gpg.close_eyes()
+
+    def open_right_eye(self):
+        self.gpg.open_right_eye()
+
+    def close_right_eye(self):
+        self.gpg.close_right_eye()
+
+    def open_left_eye(self):
+        self.gpg.open_left_eye()
+
+    def close_left_eye(self):
+        self.gpg.close_left_eye()
+
+    def set_right_eye_color(self,color):
+        self.gpg.set_right_eye_color(color)
+
+    def set_left_eye_color(self,color):
+        self.gpg.set_left_eye_color(color)
+
+    def set_eye_color(self,color):
+        self.gpg.set_eye_color(color)
 
