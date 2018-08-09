@@ -48,7 +48,7 @@ class Server:
         self.simple_path = []
 
         # initialize the gpg
-        self.gpg = AdvancedGoPiGo3(25)
+        self.gpg = AdvancedGoPiGo3(25,True)
         volt = self.gpg.volt()
         print("Current Voltage: ", volt)
         if volt < 8:
@@ -69,6 +69,7 @@ class Server:
         self.gps.set_position_callback(self.rover_position_change)
         self.gps.set_no_obstacle_callback(self.on_no_obstacles)
         self.gps.set_reached_point_callback(self.destination_reached)
+        self.gps.set_speed(800)
 
         # start remote control thread
         self.remote_can_run = False
@@ -153,6 +154,7 @@ class Server:
             # STOP
             elif command == 'S':
                 self.gps.cancel_movement()
+                self.gpg.stop()
                 self.gps_can_run = False
 
             elif command == 'Q':
@@ -228,7 +230,6 @@ class Server:
                     self.current_path = []
 
                 # we need a new full route.
-                self.current_path, _ = self.grid.find_path(self.rover_position, self.current_destination)
                 self.send_path()
 
                 # send info along
@@ -291,13 +292,15 @@ class Server:
                 # if we are currently in motion.  let's go!
                 if self.gps_can_run and len(self.simple_path) > 0:
                     destination = self.grid.get_global_coord_from_node(self.simple_path[0])
+                    self.gpg.stop()
                     self.gps_queue.queue.clear()
                     self.gps.cancel_movement()
                     self.gps_queue.put(destination)
 
     def find_path(self, send_message=True):
         if self.current_destination is not None:
-            self.current_path, self.simple_path = self.grid.find_path(self.rover_position, self.current_destination)
+            _, self.simple_path = self.grid.find_path(self.rover_position, self.current_destination)
+
 
             # send paths
             if send_message:
@@ -314,19 +317,29 @@ class Server:
             destination = self.grid.get_global_coord_from_node(node)
             self.gps_queue.put(destination)
             self.send_simple_path()
+        else:
+            self.gps_can_run = False
 
     def send_message(self, message):
         # puts a message in the send queue
         self.send_queue.put((" " + message))
 
     def send_path(self):
-        # sends the full path to the client
-        if len(self.current_path) > 0:
-            message = "FP "
-            for p in self.current_path:
-                message += p.__str__() + " "
-            message += "D"
-            self.send_message(message)
+        if len(self.simple_path) >0:
+            self.current_path,_ = self.grid.find_path(self.rover_position, self.simple_path[0])
+            for i in range(1,len(self.simple_path)):
+                print(i)
+                temp,_ = self.grid.find_path(self.simple_path[i-1],self.simple_path[i])
+                self.current_path += temp
+
+            self.current_path += temp
+            # sends the full path to the client
+            if len(self.current_path) > 0:
+                message = "FP "
+                for p in self.current_path:
+                    message += p.__str__() + " "
+                message += "D"
+                self.send_message(message)
 
     def send_simple_path(self):
         # sends the simplified path to the client
@@ -353,5 +366,6 @@ if __name__ == "__main__":
         server.video.can_run = False
         server.video.join(2)
         server.gps.stop_thread()
+        server.gps.stop()
         server.gps.cancel_movement()
         server.gps.join()

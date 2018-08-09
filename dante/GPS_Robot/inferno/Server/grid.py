@@ -354,6 +354,7 @@ class Node:
         for i in range(-1, 2):
             for j in range(-1, 2):
                 if self.gridPos.x + i != -1 and self.gridPos.y + j != -1 and self.gridPos.x + i != Node.grid.nodes_in_x and Node.grid.nodes_in_y != self.gridPos.y + j:
+                    
                     if self != Node.grid.nodes[self.gridPos.x + i][self.gridPos.y + j]:
                         temp.append(Node.grid.nodes[self.gridPos.x + i][self.gridPos.y + j])
         return temp

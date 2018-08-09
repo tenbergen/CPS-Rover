@@ -130,6 +130,10 @@ class GPS(Thread):
     def set_min_distance(self, dst):
         self.__minimum_distance = dst
 
+    def set_speed(self, spd):
+        self.speed = spd
+        self.gpg.set_speed(spd)
+
     # returns the current distance from the destination
     def distance(self, destination):
         return self.__distance(self.__transform.position, destination)
@@ -184,11 +188,11 @@ class GPS(Thread):
         self.__destination = coord
 
         # default local variables
-        sleep_tick = .100
+        sleep_tick = .00100
         distance_threshold = self.__threshold
         previous_locations = []
-
         self.__cancel_early = False
+        
 
         # if we are already there, don't do anything
         if self.distance_to_destination() <= distance_threshold:
@@ -199,13 +203,13 @@ class GPS(Thread):
 
         # prep to move
         self.turn_to_face(coord)
+        self.check_for_obstacles()
         time.sleep(sleep_tick)
         dst = self.distance_to_destination()
         self.__determine_speed(dst)
 
         # time to move
         self.gpg.forward()
-        time.sleep(sleep_tick)
 
         # while we haven't found our destination
         while dst >= distance_threshold:
@@ -340,7 +344,7 @@ class GPS(Thread):
         if difference > tolerable_deviation:
 
             # slow down for higher fidelity
-            self.gpg.set_speed(100)
+            self.gpg.set_speed(self.__speed/2)
 
             # if our current angle exceeds the angle we need
             if self.__transform.rotation > angle:
@@ -392,6 +396,8 @@ class GPS(Thread):
 
             # we have an accurate reading now.
             self.gpg.set_speed(self.__speed)
+
+            time.sleep(.01)
 
     # rotate to face a specific point
     def turn_to_face(self, coord):
