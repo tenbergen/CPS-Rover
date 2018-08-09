@@ -41,6 +41,9 @@ CYAN = (0, 255, 255)
 PURPLE = (255, 0, 255)
 RED = (255, 0, 0)
 
+# log size
+MAX_LOG_SIZE = 1000
+
 
 class Server:
     def __init__(self):
@@ -66,6 +69,8 @@ class Server:
         self.simple_path = []
         self.mode = 0
         self.status = 0
+        self.log = []
+        self.log_count = 0
 
         # initialize the gpg
         self.gpg = AdvancedGoPiGo3(25, True)
@@ -176,6 +181,7 @@ class Server:
                         node = self.grid.nodes[x][y]
                         if node.node_type == OPEN_SPACE and node != self.rover_position:
                             self.current_destination = node
+                            self.update_log("Command received: new destination at " + str(node.gridPos))
                             self.find_path()
 
                 # home change
@@ -185,6 +191,7 @@ class Server:
                     node = self.grid.nodes[x][y]
                     if node.node_type == OPEN_SPACE:
                         self.home = node
+                    self.update_log("Command received: move home location to " + str(self.home.gridPos))
                 # go
                 elif command == 'GO':
                     self.find_path()
@@ -194,6 +201,7 @@ class Server:
                     else:
                         self.change_status(TO_POINT)
                     self.next_gps_point()
+                    self.update_log("Command received: GO")
 
                 # REMOTE CONTROL COMMANDS
                 # STOP
@@ -201,6 +209,8 @@ class Server:
                     self.gps.cancel_movement()
                     self.gpg.stop()
                     self.gps_can_run = False
+                    self.update_log("Command received: stop")
+                    self.change_status(IDLE)
 
                 elif command == 'Q':
                     print("Quitting")
@@ -231,6 +241,7 @@ class Server:
                     self.gpg.led_on(0)
                     self.gpg.led_on(1)
                     self.gpg.open_left_eye()
+                    self.update_log("command received: turn LED on")
 
                 # LEDS off
                 elif command == "LOFF":
@@ -238,22 +249,31 @@ class Server:
                     self.gpg.led_off(0)
                     self.gpg.led_off(1)
                     self.gpg.close_left_eye()
+                    self.update_log("command received: turn LED off")
                 
     def node_changed(self, x, y, node_type):
         self.grid.set_node(x, y, node_type)
         if node_type == OBSTACLE:
             self.add_obstacle(self.grid.nodes[x][y])
+
+        if node_type == 0:
+            temp = "open space"
+        elif node_type == 1:
+            temp = "obstacle"
+        self.update_log("Command received: Node " + str(self.grid.nodes[x][y].gridPos) + " has type " + str(temp))
         self.find_path()
 
     def node_changed_to_open(self, node, node_type):
         self.grid.set_node_type(node, node_type)
         self.send_message("N " + str(node.gridPos.x) + " " + str(node.gridPos.y) + " 0")
+        self.update_log("node changed to open space: " + str(node.gridPos))
         self.find_path()
 
     def on_no_obstacles(self,position):
         if position.x > 0 and position.y > 0 and position.x <= self.grid_width and position.y <= self.grid_height:
             node = self.grid.node_from_global_coord(position)
             path, _ = self.grid.find_path(self.rover_position, node, False)
+            self.update_log("No obstacles found this tick")
 
             for p in path:
                 if p.node_type != 0:
@@ -261,6 +281,7 @@ class Server:
                         self.node_changed_to_open(p, 0)
 
     def rover_position_change(self, position):
+        self.update_log("Rover position update: " + str(position))
         self.send_message("RT " + str(position.x) + " " + str(position.y))
         # We only care about it if it is in the grid.
         if position.x > 0 and position.y > 0 and position.x <= self.grid_width and position.y <= self.grid_height:
@@ -280,10 +301,11 @@ class Server:
 
                 # send info along
                 self.send_message("R " + str(node.gridPos.x) + " " + str(node.gridPos.y))
+                self.update_log("Rover node Position changed: "+ str(node.gridPos))
 
     def destination_reached(self, pos):
         print("callback-point reached", pos)
-
+        self.update_log("Point Reached")
         # send the next point to the gps
         self.next_gps_point()
 
@@ -292,6 +314,7 @@ class Server:
                 self.current_destination is not None and self.current_destination == self.rover_position):
             print("final destination reached")
             self.send_message("DR")
+            self.update_log("Destination Reached")
             self.gps.cancel_movement()
             self.gps_can_run = False
             self.change_status(IDLE)
@@ -304,6 +327,7 @@ class Server:
             # We still only care if this changes anything
             if node.node_type != 1:
                 print("callback-obstacle found")
+                self.update_log("obstacle found at " + str(position))
 
                 # we have an obstacle!
                 self.add_obstacle(node)
@@ -379,7 +403,7 @@ class Server:
             self.current_path, _ = self.grid.find_path(self.rover_position, self.simple_path[0])
             for i in range(1, len(self.simple_path)):
                 print(i)
-                temp, _ = self.grid.find_path(self.simple_path[i-1],self.simple_path[i])
+                temp, _ = self.grid.find_path(self.simple_path[i-1], self.simple_path[i])
                 self.current_path += temp
 
             # sends the full path to the client
@@ -398,30 +422,52 @@ class Server:
                 message += p.__str__() + " "
             message += "D"
             self.send_message(message)
+            self.update_log("Path found from" + str(self.rover_position) + " to " + str(self.current_destination))
 
     def change_status(self, status):
         self.status = status
         if status == IDLE:
             self.gpg.set_left_eye_color(BLUE)
+            temp = "Idle"
         elif status == TO_POINT:
             self.gpg.set_left_eye_color(GREEN)
+            temp = "Traveling to point"
         elif status == TO_HOME:
             self.gpg.set_left_eye_color(YELLOW)
+            temp = "Returning home"
         self.gpg.open_left_eye()
+        self.update_log("status of rover changed: " + temp)
         self.send_status()
 
     def change_mode(self, mode):
         if mode == AUTO:
             self.gpg.set_right_eye_color(CYAN)
+            temp = "Automatic"
         elif mode == SIM:
             self.gpg.set_right_eye_color(RED)
+            temp = "Simulate network interruption"
         elif mode == MAN:
             self.gpg.set_eye_color(PURPLE)
             self.gpg.close_left_eye()
+            temp = "Manual"
         self.gpg.open_eyes()
         if self.mode == MAN:
             self.open_left_eye()
         self.mode = mode
+        self.update_log("mode changed: " + temp)
+
+    def update_log(self, message):
+        self.log.append(message)
+
+        if len(self.log) > MAX_LOG_SIZE:
+            self.log.pop(0)
+            self.log_count -= 1
+
+        if self.mode != SIM:
+            while self.log_count < len(self.log):
+                self.send_message("L " + self.log[self.log_count] + " D")
+                self.log_count += 1
+
             
 
 if __name__ == "__main__":
