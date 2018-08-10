@@ -71,6 +71,7 @@ class Client(QThread):
             while not self.send_queue.empty():
                 data = self.send_queue.get()
                 self.send_message(data)
+                #print(data)
 
             # if the controller is active, send pygame events
             self.handle_controller_events()

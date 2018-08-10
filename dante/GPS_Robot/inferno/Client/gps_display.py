@@ -11,7 +11,6 @@ import traceback
 import time
 from vector import Vector
 
-# TODO client should have send messages for different types of data.
 # TODO add rover status on GUI
 # TODO add controller control scheme to the GUI
 # TODO add legend to grid.
@@ -502,8 +501,7 @@ class App(QMainWindow):
         print("adding destination")
         if node.node_type == 0 and node != self.rover_position and not self.destinations.__contains__(node):
             self.destinations.append(node)
-            if len(self.destinations) == 1:
-                self.send_queue.put("D " + str(node.gridPos.x) + " " + str(node.gridPos.y))
+            self.send_queue.put("D " + str(node.gridPos.x) + " " + str(node.gridPos.y))
             return True
         return False
 
@@ -617,9 +615,9 @@ class App(QMainWindow):
 
             if len(self.destinations) > 0:
                 print("Destination reached, going to next destination")
-                self.send_queue.put(
-                    "D " + str(self.destinations[0].gridPos.x) + " " + str(self.destinations[0].gridPos.y))
-                self.send_queue.put("GO")
+                #self.send_queue.put(
+                    #"D " + str(self.destinations[0].gridPos.x) + " " + str(self.destinations[0].gridPos.y))
+                #self.send_queue.put("GO")
             else:
                 print("final destination reached")
                 self.send_queue.put("S")
