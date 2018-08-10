@@ -46,6 +46,7 @@ YELLOW = (255, 255, 0)
 CYAN = (0, 255, 255)
 PURPLE = (255, 0, 255)
 RED = (255, 0, 0)
+ORANGE = (255,165,0)
 
 # log size
 MAX_LOG_SIZE = 1000
@@ -77,6 +78,7 @@ class Server:
         self.mode = 0
         self.status = 0
         self.position_log = []
+        self.position_log.append(self.home)
         self.sim_type = 0
 
         # initialize the gpg
@@ -278,7 +280,7 @@ class Server:
 
     def stop_navigation(self):
         self.gps.cancel_movement()
-        self.gpg.stop()
+        #self.gpg.stop()
         self.gps_can_run = False
         self.change_status(IDLE)
 
@@ -318,9 +320,9 @@ class Server:
                     self.position_log.append(node)
 
                 # if we arrived at a destination we are done.
-                if len(self.destinations) > 0 and node == self.destinations[0]:
-                    self.destinations = []
-                    self.current_path = []
+##                if len(self.destinations) > 0 and node == self.destinations[0]:
+##                    self.destinations = []
+##                    self.current_path = []
 
                 # we need a new full route.
                 self.send_path()
@@ -339,7 +341,12 @@ class Server:
             print("final destination reached")
             self.send_message("DR")
             self.stop_navigation()
-            self.destinations.pop(0)
+            if len(self.destinations) > 0:
+                self.destinations.pop(0)
+                self.start_navigation()
+            else:
+                self.destinations = []
+                self.find_path()
 
     def obstacle_found(self, position):
         # We only care about it if it is in the grid.
@@ -373,8 +380,8 @@ class Server:
 
             # IF there is a destination in play and it is hit by the border, it needs to be cleared.
             if len(self.destinations) > 0:
-                if set(border).isdisjoint(set(self.destinations)):
-                    self.destinations = []
+                if border.__contains__(self.destinations[0]) or node == self.destinations[0]:
+                    self.destinations.pop(0)
                     self.current_path = []
                     self.simple_path = []
                 
@@ -385,7 +392,7 @@ class Server:
                 # if we are currently in motion.  let's go!
                 if self.gps_can_run and len(self.simple_path) > 0:
                     destination = self.grid.get_global_coord_from_node(self.simple_path[0])
-                    self.gpg.stop()
+                    #self.gpg.stop()
                     self.gps_queue.queue.clear()
                     self.gps.cancel_movement()
                     self.gps_queue.put(destination)
@@ -394,11 +401,11 @@ class Server:
         if len(self.destinations) > 0:
             _, self.simple_path = self.grid.find_path(self.rover_position, self.destinations[0])
 
-            # send paths
-            if send_message:
-                print("sending paths")
-                self.send_path()
-                self.send_simple_path()
+        # send paths
+        if send_message:
+            print("sending paths")
+            self.send_path()
+            self.send_simple_path()
 
     def next_gps_point(self):
         # if we actually have somewhere to go
@@ -423,7 +430,6 @@ class Server:
         if len(self.simple_path) > 0:
             self.current_path, _ = self.grid.find_path(self.rover_position, self.simple_path[0])
             for i in range(1, len(self.simple_path)):
-                print(i)
                 temp, _ = self.grid.find_path(self.simple_path[i-1], self.simple_path[i])
                 self.current_path += temp
 
@@ -434,6 +440,8 @@ class Server:
                     message += p.__str__() + " "
                 message += "D"
                 self.send_message(message)
+        else:
+            self.send_message("FP D")
 
     def send_simple_path(self):
         # sends the simplified path to the client
@@ -443,6 +451,8 @@ class Server:
                 message += p.__str__() + " "
             message += "D"
             self.send_message(message)
+        else:
+            self.send_message("SP D")
 
     def change_status(self, status):
         self.status = status
@@ -459,24 +469,41 @@ class Server:
         # handle lights
         if mode == AUTO:
             self.gpg.set_right_eye_color(CYAN)
+            self.gpg.open_eyes()
         elif mode == SIM:
+            print("starting sim " + str(self.sim_type))
             self.gpg.set_right_eye_color(RED)
+            if self.sim_type == 1:
+                self.gpg.set_antenna_color(BLUE)
+            elif self.sim_type == 2:
+                self.gpg.set_antenna_color(ORANGE)
+            elif self.sim_type == 3:
+                self.gpg.set_antenna_color(GREEN)
+            else: #  self.sim_type == 4:
+                self.gpg.set_antenna_color(YELLOW)
+            self.gpg.open_all_leds()
+        
         else:  # mode == MAN:
             self.gpg.set_eye_color(PURPLE)
+            self.gpg.open_eyes()
             self.gpg.close_left_eye()
-        self.gpg.open_eyes()
+        
 
         # handle state change
         if self.mode == MAN:
             self.gpg.open_left_eye()
         elif self.mode == SIM:
+            self.gpg.close_antenna()
             # Send all obstacles
             for node in self.grid.all_obstacles:
                 self.send_message("N " + str(node.gridPos.x) + " " + str(node.gridPos.y) + " 1")
 
             # Send all destinations
+            temp = "DU "
             for node in self.destinations:
-                self.send_message("DU " + str(node.gridPos.x) + " " + str(node.gridPos.y))
+                temp+= str(node.gridPos.x) + " " + str(node.gridPos.y) + " "
+            temp += " UD"
+            self.send_message(temp)
 
             # Send paths
             self.send_path()
@@ -509,4 +536,4 @@ if __name__ == "__main__":
         server.gps.stop()
         server.gps.cancel_movement()
         server.gps.join()
-        server.gpg.close_eyes()
+        server.gpg.close_all_leds()

@@ -59,6 +59,7 @@ class AdvancedGoPiGo3:
         self.gpg = easygopigo3.EasyGoPiGo3(use_mutex)
         self.speed = self.gpg.get_speed()
         self.angle_compensation = angle_compensation  # this corrects for the ability to rotate one full circle.
+        self.antenna_color = (255,255,255)
         
     def volt(self):
         return self.gpg.volt()
@@ -163,4 +164,24 @@ class AdvancedGoPiGo3:
 
     def set_eye_color(self,color):
         self.gpg.set_eye_color(color)
+
+    def set_antenna_color(self,color):
+        if isinstance(color, tuple) and len(color) == 3:
+            self.antenna_color = color
+        else:
+            raise TypeError("antenna color not valid")
+
+    def open_antenna(self):
+        self.gpg.set_led(self.gpg.LED_WIFI,self.antenna_color[0],self.antenna_color[1],self.antenna_color[2])
+
+    def close_antenna(self):
+        self.gpg.set_led(self.gpg.LED_WIFI,0,0,0)
+
+    def open_all_leds(self):
+        self.open_eyes()
+        self.open_antenna()
+
+    def close_all_leds(self):
+        self.close_eyes()
+        self.close_antenna()
 
