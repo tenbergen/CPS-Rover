@@ -11,9 +11,11 @@ import traceback
 import time
 from vector import Vector
 
+# TODO client should have send messages for different types of data.
+# TODO add rover status on GUI
 # TODO add controller control scheme to the GUI
 # TODO add legend to grid.
-# TODO change the way grids save/load.  Add protocol to send over socket
+# TODO change the way grids save/load.  Add protocol to send over socket.
 # TODO change grid_panel to function using mouse location and painting squares
 
 # Mouse states
@@ -23,16 +25,42 @@ REMOVE_OBSTACLE = 2
 ADD_DESTINATION = 3
 ADD_HOME = 4
 
+# Simulation States
+SIM_MODE = 1
+WAIT = 1
+GO_BACK = 2
+CONTINUE = 3
+GO_HOME = 4
+
 # Map Colors
 OPEN_SPACE = Qt.gray
 BORDER_SPACE = Qt.darkGray
 OBSTACLE = Qt.black
 DESTINATION = Qt.green
 PATH = Qt.blue
-ROVER = Qt.red
+ROVER_AUTO = Qt.cyan
+ROVER_MAN = Qt.magenta
+ROVER_SIM = Qt.red
 HOME = Qt.yellow
 SIMPLE_PATH = Qt.darkBlue
 FUTURE_DESTINATION = Qt.darkGreen
+
+# Modes
+AUTO = 0
+SIM = 1
+MANUAL = 2
+
+
+def sim_state(button):
+    global SIM_MODE
+    if button.text() == "Wait":
+        SIM_MODE = WAIT
+    elif button.text() == "Go To Previous Points":
+        SIM_MODE = GO_BACK
+    elif button.text() == "Continue With Waypoints":
+        SIM_MODE = CONTINUE
+    elif button.text() == "Go Home":
+        SIM_MODE = GO_HOME
 
 
 # This helps switch mouse modes for the GUI
@@ -49,9 +77,11 @@ def btnstate(button):
 
 
 # This class creates and maintains a GUI that sends instructions to the rover.
+
 class App(QMainWindow):
 
     # create the default instance
+    # noinspection PyArgumentList
     def __init__(self):
         super().__init__()
 
@@ -76,23 +106,30 @@ class App(QMainWindow):
 
         # create the important point variables
         self.rover_position = self.grid.get_node(0, 0)
+        self.rover_actual_position = Vector()
         self.destinations = []
         self.home = self.grid.get_node(1, 1)
         self.current_path = []
         self.simple_path = []
         self.in_motion = False
+        self.mode = AUTO
+        self.rover_status = 0
 
         # setup client and signals
         self.send_queue = Queue()
         self.client = Client(self.send_queue)
         self.client.on_rover_position_changed.connect(self.rover_pos_changed)
+        self.client.on_rover_actual_position_changed.connect(self.on_actual_position_updated)
         self.client.on_destination_reached.connect(self.on_point_reached)
+        self.client.on_destination_update.connect(self.on_destinations_updated)
+        self.client.on_rover_status_changed.connect(self.on_rover_status_update)
         self.client.on_node_changed.connect(self.on_node_changed)
         self.client.on_simple_path_changed.connect(self.on_simple_path_changed)
         self.client.on_path_changed.connect(self.on_path_changed)
         self.client.on_camera_button_pressed.connect(self.on_cam_on_off_clicked)
         self.client.on_go_home_pressed.connect(self.on_go_home_clicked)
         self.client.on_auto_switch.connect(self.on_autodrive_clicked)
+
         self.remote_on = False
 
         # create the actual GUI
@@ -115,6 +152,50 @@ class App(QMainWindow):
         self.grid_panel = GridPanel(self, self.grid)
         self.button_panel = QVBoxLayout()
         self.mouse_layout = QGroupBox(self)
+        self.simulate_panel = QGroupBox(self)
+
+        # set up for simulation modes
+        self.simulate_panel.setTitle("Simulation Mode")
+        self.simulate_panel.setFixedSize(200, 125)
+        self.simulate_panel.move(990, 15)
+
+        # layout for simulation
+        grid_s = QGridLayout(self.simulate_panel)
+
+        # wait
+        self.sim_wait_button = QRadioButton(self)
+        self.sim_wait_button.setText("Wait")
+        self.sim_wait_button.setChecked(True)
+        self.sim_wait_button.toggled.connect(lambda: sim_state(self.sim_wait_button))
+
+        # Go back
+        self.sim_back_button = QRadioButton(self)
+        self.sim_back_button.setText("Wait")
+        self.sim_back_button.toggled.connect(lambda: sim_state(self.sim_back_button))
+
+        # Continue
+        self.sim_cont_button = QRadioButton(self)
+        self.sim_cont_button.setText("Continue")
+        self.sim_cont_button.toggled.connect(lambda: sim_state(self.sim_cont_button))
+
+        # Continue
+        self.sim_home_button = QRadioButton(self)
+        self.sim_home_button.setText("Home")
+        self.sim_home_button.toggled.connect(lambda: sim_state(self.sim_home_button))
+
+        # simulate network disconnect button
+        self.sim_button = QPushButton(self)
+        self.sim_button.setText("Start Simulation")
+        self.sim_button.clicked.connect(self.on_sim_start)
+
+        # add simulation buttons to layout
+        grid_s.setSpacing(10)
+        grid_s.addWidget(self.sim_wait_button, 0, 0)
+        grid_s.addWidget(self.sim_back_button, 0, 1)
+        grid_s.addWidget(self.sim_cont_button, 1, 0)
+        grid_s.addWidget(self.sim_home_button, 1, 1)
+        grid_s.addWidget(self.sim_button, 2, 0)
+        self.simulate_panel.setEnabled(False)
 
         # set up for mouse actions
         self.mouse_layout.setTitle("On Click")
@@ -124,7 +205,7 @@ class App(QMainWindow):
         # layout for mouse actions
         gridl = QGridLayout(self.mouse_layout)
 
-        # add obstscle
+        # add obstacle
         self.add_obstacle_button = QRadioButton(self)
         self.add_obstacle_button.setText("Add Obstacle")
         self.add_obstacle_button.setChecked(True)
@@ -229,12 +310,7 @@ class App(QMainWindow):
         self.video_layout.setAlignment(Qt.AlignVCenter)
 
         # move panel to position!
-        self.button_panel.setGeometry(QRect(600, 5, 440, 700))
-
-    # noinspection PyArgumentList
-    @pyqtSlot(QImage)
-    def set_image(self, image):
-        self.video.setPixmap(QPixmap.fromImage(image))
+        self.button_panel.setGeometry(QRect(525, 5, 440, 700))
 
     def on_connect(self):
         try:
@@ -252,6 +328,7 @@ class App(QMainWindow):
             self.autodrive_button.setEnabled(True)
             self.start_stop_button.setEnabled(True)
             self.go_home_button.setEnabled(True)
+            self.simulate_panel.setEnabled(True)
 
     # when the window closes
     def closeEvent(self, event):
@@ -275,12 +352,37 @@ class App(QMainWindow):
     def get_mouse_mode(self):
         return self.MOUSE_MODE
 
+    def on_sim_start(self):
+        if self.sim_button.text() == "Start Simulation":
+            self.send_queue.put("SIM " + str(SIM_MODE))
+            self.send_queue.put("MODE 1")
+            self.sim_button.setText("Stop Simulation")
+            self.start_stop_button.hide()
+            self.autodrive_button.hide()
+            self.video.hide()
+            self.mode = SIM
+        else:
+            self.send_queue.put("MODE 0")
+            self.sim_button.setText("Start Simulation")
+            self.autodrive_button.show()
+            self.video.show()
+            if not self.client.remote_on:
+                self.start_stop_button.show()
+                self.mode = AUTO
+            else:
+                self.mode = MANUAL
+
     # when all the obstacles need to be cleared
     def on_clear_obstacles(self):
         temp = list(self.grid.all_obstacles)
         while len(temp) > 0:
             self.on_obstacle_removed(temp.pop(0))
         self.grid_panel.redraw_grid()
+
+    # noinspection PyArgumentList
+    @pyqtSlot(QImage)
+    def set_image(self, image):
+        self.video.setPixmap(QPixmap.fromImage(image))
 
     # updates the simple path
     # noinspection PyArgumentList
@@ -306,14 +408,27 @@ class App(QMainWindow):
     # noinspection PyArgumentList
     @pyqtSlot(Vector, int)
     def on_node_changed(self, node, node_type):
-        try:
-            self.grid.set_node(node.x, node.y, node_type)
-            print(node.x, node.y, node_type)
-            self.grid_panel.redraw_grid()
-            if node_type ==1:
-                self.validate_destinations(self.grid.get_node(node.x, node.y))
-        except:
-            print(traceback.format_exc())
+        self.grid.set_node(node.x, node.y, node_type)
+        print(node.x, node.y, node_type)
+        self.grid_panel.redraw_grid()
+        if node_type == 1:
+            self.validate_destinations(self.grid.get_node(node.x, node.y))
+
+    # when the destinations have changed server side
+    # noinspection PyArgumentList
+    @pyqtSlot(list)
+    def on_destinations_updated(self, positions):
+        self.destinations = positions
+        self.grid_panel.redraw_grid()
+
+    # noinspection PyArgumentList
+    @pyqtSlot(Vector)
+    def on_actual_position_updated(self, position):
+        self.rover_actual_position = position
+        # TODO add label that displays this information.
+
+    def on_rover_status_update(self, status):
+        self.rover_status = status
 
     # factory for button click events.
     def on_click_event(self, vector):
@@ -353,13 +468,12 @@ class App(QMainWindow):
 
             # we need to spread the grid.
             self.grid.set_node_type(node, 1)
-            border = self.grid.all_borders
-
             self.validate_destinations(node)
             return True
         return False
 
-    def validate_destinations(self,node):
+    def validate_destinations(self, node):
+        border = self.grid.all_borders
         # IF there is a destination in play and it is hit by the border, it needs to be cleared.
         if len(self.destinations) > 0:
             if border.__contains__(self.destinations[0]) or node == self.destinations[0]:
@@ -397,6 +511,7 @@ class App(QMainWindow):
     def on_home_added(self, node):
         if self.home != node:
             self.home = node
+            self.send_queue.put("H " + str(node.gridPos.x) + " " + str(node.gridPos.y))
             return True
         return False
 
@@ -458,6 +573,8 @@ class App(QMainWindow):
             button.setText("Switch To Automatic")
             self.client.remote_on = True
             self.start_stop_button.hide()
+            self.send_queue.put("MODE 2")
+            self.mode = MANUAL
         else:
             button.setText("Switch To Manual")
             if self.in_motion:
@@ -465,6 +582,8 @@ class App(QMainWindow):
             self.client.remote_on = False
             self.send_queue.put("S")
             self.start_stop_button.show()
+            self.send_queue.put("MODE 0")
+            self.mode = AUTO
 
     # When the user tells the robot to go home.  drop everything and go home.
     # noinspection PyArgumentList
@@ -570,6 +689,7 @@ class GridPanel(QGroupBox):
                 temp.x = j
                 temp.y = self.grid.nodes_in_y - i
                 temp.clicked.connect(parent.on_click_event(Vector(i, j)))
+                # noinspection PyArgumentList
                 layout.addWidget(temp, self.grid.nodes_in_y - j, i)
                 self.buttons.append(temp)
 
@@ -598,7 +718,12 @@ class GridPanel(QGroupBox):
         for b in self.buttons:
             b.determine_type()
             if b.node == self.par.rover_position:
-                b.set_color(ROVER)
+                if self.par.mode == AUTO:
+                    b.set_color(ROVER_AUTO)
+                elif self.par.mode == MANUAL:
+                    b.set_color(ROVER_MAN)
+                elif self.par.mode == SIM:
+                    b.set_color(ROVER_SIM)
 
             elif b.node == self.par.home:
                 b.set_color(HOME)

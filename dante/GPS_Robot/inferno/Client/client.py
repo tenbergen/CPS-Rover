@@ -15,6 +15,8 @@ import traceback
 class Client(QThread):
     # Signal events
     on_rover_position_changed = pyqtSignal(Vector)
+    on_rover_actual_position_changed = pyqtSignal(Vector)
+    on_rover_status_changed = pyqtSignal(int)
     on_destination_reached = pyqtSignal()
     on_node_changed = pyqtSignal(Vector, int)
     on_path_changed = pyqtSignal(list)
@@ -22,6 +24,7 @@ class Client(QThread):
     on_camera_button_pressed = pyqtSignal()
     on_go_home_pressed = pyqtSignal()
     on_auto_switch = pyqtSignal()
+    on_destination_update = pyqtSignal(list)
 
     def __init__(self, send_queue):
         QThread.__init__(self)
@@ -178,8 +181,17 @@ class Client(QThread):
 
             # DR - Destination reached
             elif command == 'DR':
-
                 self.on_destination_reached.emit()
+
+            elif command == 'DU':
+                destinations = []
+                e = data.pop(0)
+                while e != 'D':
+                    x = int(e)
+                    y = int(data.pop(0))
+                    position = Vector(x, y)
+                    destinations.append(position)
+                self.on_destination_update.emit(destinations)
 
             # N  - node information
             elif command == 'N':
@@ -215,6 +227,16 @@ class Client(QThread):
                     e = data.pop(0)
 
                 self.on_path_changed.emit(path)
+
+            elif command == 'ST':
+                status = int(data.pop(0))
+                self.on_rover_status_changed.emit(status)
+
+            elif command == 'RT':
+                x = float(data.pop(0))
+                y = float(data.pop(0))
+                position = Vector(x, y)
+                self.on_rover_actual_position_changed.emit(position)
 
     # send message through the connection.
     def send_message(self, message):
