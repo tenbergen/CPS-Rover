@@ -75,6 +75,7 @@ class GPS(Thread):
                 self.check_for_obstacles()
                 time.sleep(.1)
         self.stop()
+        print("GPS Thread stopped")
 
     # A callback sent to the hedge, it changes the position and rotation information every time it receives an update.
     def position_update(self):
@@ -192,7 +193,6 @@ class GPS(Thread):
         distance_threshold = self.__threshold
         previous_locations = []
         self.__cancel_early = False
-        
 
         # if we are already there, don't do anything
         if self.distance_to_destination() <= distance_threshold:
@@ -219,6 +219,7 @@ class GPS(Thread):
                 self.gpg.stop()
                 self.__cancel_early = False
                 self.gpg.set_speed(self.__speed)
+                print("canceling early")
                 return
 
             # update distance
@@ -318,14 +319,14 @@ class GPS(Thread):
 
         if self.__debug:
             print("turning left.")
-        self.gpg.rotate_left(abs(degrees))
+        self.gpg.rotate_left(abs(degrees),True)
 
     # rotate right by degrees
     def __turn_right(self, degrees):
 
         if self.__debug:
             print("turning right.")
-        self.gpg.rotate_right(abs(degrees))
+        self.gpg.rotate_right(abs(degrees),True)
 
     # turn to a specific angle
     def turn_to_angle(self, angle):
