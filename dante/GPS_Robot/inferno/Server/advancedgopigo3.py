@@ -44,6 +44,8 @@ except Exception as e:
     print("Unknown issue while importing gopigo3")
     print(e)
 
+import threading
+
 
 class AdvancedGoPiGo3:
     """
@@ -56,6 +58,7 @@ class AdvancedGoPiGo3:
 "   """
 
     def __init__(self, angle_compensation=0, use_mutex=False):
+        self.lock = threading.Lock()
         self.gpg = easygopigo3.EasyGoPiGo3(use_mutex)
         self.speed = self.gpg.get_speed()
         self.angle_compensation = angle_compensation  # this corrects for the ability to rotate one full circle.
@@ -85,8 +88,12 @@ class AdvancedGoPiGo3:
     '''
     The following methods involve the movement of the robot, including turning and rotation.
     '''
-    def rotate_left(self, degrees):
-        self.gpg.turn_degrees(-abs(self.__rotation_compensation(degrees)))
+    def rotate_left(self, degrees, blocking):
+        self.lock.acquire()
+        try:
+            self.gpg.turn_degrees(-abs(self.__rotation_compensation(degrees)), blocking)
+        finally:
+            self.lock.release()
 
     def rotate_right_forever(self):
         self.gpg.set_motor_dps(self.gpg.MOTOR_LEFT, self.speed/2)
@@ -96,35 +103,67 @@ class AdvancedGoPiGo3:
         self.gpg.set_motor_dps(self.gpg.MOTOR_LEFT, -self.speed/2)
         self.gpg.set_motor_dps(self.gpg.MOTOR_RIGHT, self.speed/2)
 
-    def rotate_right(self, degrees):
-        self.gpg.turn_degrees(abs(self.__rotation_compensation(degrees)))
+    def rotate_right(self, degrees, blocking):
+        self.lock.acquire()
+        try:
+            self.gpg.turn_degrees(abs(self.__rotation_compensation(degrees)), blocking)
+        finally:
+            self.lock.release()
         
     def __rotation_compensation(self, degrees):
         return degrees + (degrees * (self.angle_compensation/360))
 
     def right(self):
-        self.gpg.right()
+        self.lock.acquire()
+        try:
+            self.gpg.right()
+        finally:
+            self.lock.release()
 
     def left(self):
-        self.gpg.left()
+        self.lock.acquire()
+        try:
+            self.gpg.left()
+        finally:
+            self.lock.release()
 
     def forward(self):
-        self.gpg.forward()
+        self.lock.acquire()
+        try:
+            self.gpg.forward()
+        finally:
+            self.lock.release()
         
     def backward(self):
         self.gpg.backward()
         
     def stop(self):
-        self.gpg.stop()
+        self.lock.acquire()
+        try:
+            self.gpg.stop()
+        finally:
+            self.lock.release()
         
     def drive_cm(self, distance, blocking=True):
-        self.gpg.drive_cm(distance, blocking)
+        self.lock.acquire()
+        try:
+            self.gpg.drive_cm(distance, blocking)
+        finally:
+            self.lock.release()
 
     def drive_inches(self, dist, blocking=True):
-        self.gpg.drive_inches(dist, blocking)
+        self.lock.acquire()
+        try:
+            self.gpg.drive_inches(dist, blocking)
+        finally:
+            self.lock.release()
 
     def drive_degrees(self, degrees, blocking=True):
-        self.gpg.drive_degrees(degrees, blocking)
+        self.lock.acquire()
+        try:
+            self.gpg.drive_degrees(degrees, blocking)
+        finally:
+            self.lock.release()
 
                                
         

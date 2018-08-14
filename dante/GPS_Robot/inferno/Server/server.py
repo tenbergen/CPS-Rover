@@ -46,7 +46,7 @@ YELLOW = (255, 255, 0)
 CYAN = (0, 255, 255)
 PURPLE = (255, 0, 255)
 RED = (255, 0, 0)
-ORANGE = (255,165,0)
+ORANGE = (255,165,40)
 
 # log size
 MAX_LOG_SIZE = 1000
@@ -80,9 +80,10 @@ class Server:
         self.position_log = []
         self.position_log.append(self.home)
         self.sim_type = 0
+        self.sim_destinations = [] # where destinations are held during certain simulations
 
         # initialize the gpg
-        self.gpg = AdvancedGoPiGo3(25, True)
+        self.gpg = AdvancedGoPiGo3(25, use_mutex=True) # was true
         volt = self.gpg.volt()
         print("Current Voltage: ", volt)
         if volt < 8:
@@ -113,7 +114,7 @@ class Server:
         self.gps_queue = queue.Queue()
         self.gps = GPS(10, 1, self.gpg, q=self.gps_queue, debug_mode=False)
         self.gps.set_min_distance(50)
-        self.gps_can_run = True
+        self.gps_can_run = False
         self.gps.set_obstacle_callback(self.obstacle_found)
         self.gps.set_position_callback(self.rover_position_change)
         self.gps.set_no_obstacle_callback(self.on_no_obstacles)
@@ -177,6 +178,7 @@ class Server:
                     x = int(data.pop(0))
                     y = int(data.pop(0))
                     if x == -1 and y == -1:
+                        print("cleared destinations")
                         self.destinations = []
                         self.current_path = []
                         self.simple_path = []
@@ -206,6 +208,7 @@ class Server:
                 elif command == 'Q':
                     print("Quitting")
                     self.can_run = False
+                    
                 # move
                 elif command == 'M':
                     # the numbers coming in should be integers, but aren't always
@@ -226,6 +229,7 @@ class Server:
                             self.gpg.backward()
                         else:
                             self.gpg.forward()
+                            
                 # LEDS on
                 elif command == "LON":
                     print("Turning LED on")
@@ -245,31 +249,75 @@ class Server:
 
     def start_sim_behavior(self):
         if self.sim_type == WAIT:
-            self.gps.cancel_movement()
+            self.sim_run = self.gps_can_run
+            self.stop_navigation()
+            self.gpg.stop()
             self.change_status(IDLE)
+            
         elif self.sim_type == GO_BACK:
             self.stop_navigation()
-            self.destinations.insert(0, self.position_log.pop(-1))
-            self.start_navigation()
+            self.gpg.stop()
+            if len(self.position_log) > 0:
+                self.destinations = []
+                self.destinations.append(self.position_log.pop(-1))
+                if self.destinations[0] == self.rover_position and len(self.position_log) > 0:
+                        self.destinations = []
+                        self.destinations.append(self.position_log.pop(-1))
+                print("log pulled")
+                self.start_navigation()
+
         elif self.sim_type == CONTINUE:
-            self.start_navigation()
-        else:
+            print(self.gps_can_run)
+            self.sim_run = self.gps_can_run
+            self.stop_navigation()
+            self.gpg.stop()
+            
+            if self.sim_run:
+                self.start_navigation()
+        elif self.sim_type == GO_HOME:
+            print("GO home start")
+            self.sim_destinations = list(self.destinations)
             self.destinations = []
             self.destinations.append(self.home)
             self.start_navigation()
 
     def update_sim_behavior(self):
-        if self.sim_type == CONTINUE and self.status == IDLE and len(self.destinations) > 0:
-            self.start_navigation()
-        elif self.sim_type == GO_BACK and self.status == IDLE and len(self.position_log) > 0:
-            self.destinations.insert(0, self.position_log.pop(-1))
-            self.start_navigation()
+        if self.sim_type == WAIT:
+            print("Can run: ",self.gps_can_run)
+            self.stop_navigation()
+            self.change_status(IDLE)
+        if self.sim_type == CONTINUE and len(self.destinations) > 0:
+            if self.status == IDLE:
+                self.start_navigation()
+        elif len(self.destinations) == 0:
+            self.change_status(IDLE)
+            
+        if self.sim_type == GO_BACK and self.status == IDLE:
+                if len(self.position_log) > 0:
+                    self.destinations = []
+                    self.destinations.append(self.position_log.pop(-1))
+                    if self.destinations[0] == self.rover_position and len(self.position_log) > 0:
+                        self.destinations = []
+                        self.destinations.append(self.position_log.pop(-1))
+                    self.start_navigation()
+                elif self.rover_position != self.home:
+                    self.destinations.append(self.home)
+                    self.start_navigation()
 
     def end_sim_behavior(self):
-        if self.sim_type == WAIT and self.gps_can_run:
-            self.start_navigation()
-
+        print("ending simulation")
+        if self.sim_type == WAIT:
+            self.gps_can_run = self.sim_run
+            print("GPS can run again",self.gps_can_run)
+            if self.gps_can_run:
+                self.start_navigation()
+        if self.sim_type == GO_HOME:
+            self.stop_navigation()
+            self.destinations = list(self.sim_destinations)
+            
+            
     def start_navigation(self):
+        print("starting navigation")
         self.find_path()
         self.gps_can_run = True
         if len(self.destinations) > 0 and self.home is not None and self.destinations[0] == self.home:
@@ -279,8 +327,9 @@ class Server:
         self.next_gps_point()
 
     def stop_navigation(self):
+        print("stopping navigation")
         self.gps.cancel_movement()
-        #self.gpg.stop()
+        self.gpg.stop()
         self.gps_can_run = False
         self.change_status(IDLE)
 
@@ -316,8 +365,6 @@ class Server:
             if node != self.rover_position:
                 print("callback-rover position changed")
                 self.rover_position = node
-                if self.mode != SIM:
-                    self.position_log.append(node)
 
                 # if we arrived at a destination we are done.
 ##                if len(self.destinations) > 0 and node == self.destinations[0]:
@@ -336,16 +383,17 @@ class Server:
         self.next_gps_point()
 
         # if we are at our final destination, we are done.
-        if len(self.simple_path) == 0 or (
-                len(self.destinations) > 0 and self.destinations[0] == self.rover_position):
+        if len(self.destinations) > 0 and self.destinations[0] == self.rover_position:
             print("final destination reached")
             self.send_message("DR")
             self.stop_navigation()
+            
             if len(self.destinations) > 0:
+                if self.mode != SIM:
+                    self.position_log.append(self.destinations[0])
                 self.destinations.pop(0)
                 self.start_navigation()
             else:
-                self.destinations = []
                 self.find_path()
 
     def obstacle_found(self, position):
@@ -361,12 +409,13 @@ class Server:
                 self.add_obstacle(node)
 
                 path, _ = self.grid.find_path(self.rover_position, node, False)
-                path.pop(-1)
-                for p in path:
-                    if p.node_type != 0:
-                        if p.gridPos.x > 0 and p.gridPos.y > 0 and p.gridPos.x < self.grid.nodes_in_x and \
-                                p.gridPos.y < self.grid.nodes_in_y:
-                            self.node_changed_to_open(p, 0)
+                if len(path) > 0:
+                    path.pop(-1)
+                    for p in path:
+                        if p.node_type != 0:
+                            if p.gridPos.x > 0 and p.gridPos.y > 0 and p.gridPos.x < self.grid.nodes_in_x and \
+                                    p.gridPos.y < self.grid.nodes_in_y:
+                                self.node_changed_to_open(p, 0)
 
     def add_obstacle(self, node):
         # if we have a valid node to work with.
@@ -410,14 +459,17 @@ class Server:
     def next_gps_point(self):
         # if we actually have somewhere to go
         if len(self.simple_path) > 0:
+            print("navigating to next point!")
             node = self.simple_path[0]
             if node == self.rover_position and len(self.simple_path) > 0:
                 node = self.simple_path.pop(0)
             destination = self.grid.get_global_coord_from_node(node)
             self.gps_queue.put(destination)
             self.send_simple_path()
-        else:
-            self.stop_navigation()
+        #else:
+            #print("no more points!")
+            #self.stop_navigation()
+
 
     def send_message(self, message):
         # puts a message in the send queue
@@ -484,16 +536,17 @@ class Server:
             self.gpg.open_all_leds()
         
         else:  # mode == MAN:
+            self.stop_navigation()
             self.gpg.set_eye_color(PURPLE)
             self.gpg.open_eyes()
             self.gpg.close_left_eye()
-        
-
+            
         # handle state change
         if self.mode == MAN:
             self.gpg.open_left_eye()
         elif self.mode == SIM:
             self.gpg.close_antenna()
+
             # Send all obstacles
             for node in self.grid.all_obstacles:
                 self.send_message("N " + str(node.gridPos.x) + " " + str(node.gridPos.y) + " 1")
@@ -514,7 +567,7 @@ class Server:
 
             # end any behaviors
             self.end_sim_behavior()
-
+            
         self.mode = mode
 
 
