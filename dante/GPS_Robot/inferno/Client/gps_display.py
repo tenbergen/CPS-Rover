@@ -11,7 +11,6 @@ import traceback
 import time
 from vector import Vector
 
-# TODO add rover status on GUI
 # TODO add controller control scheme to the GUI
 # TODO add legend to grid.
 # TODO change the way grids save/load.  Add protocol to send over socket.
@@ -152,10 +151,129 @@ class App(QMainWindow):
         self.button_panel = QVBoxLayout()
         self.mouse_layout = QGroupBox(self)
         self.simulate_panel = QGroupBox(self)
+        self.rover_status_panel = QGroupBox(self)
+        self.legend = QGroupBox(self)
+
+        # set up legend
+        self.legend.setTitle("Legend")
+        grid_l = QGridLayout()
+        color = QLabel()
+        color.setText("<b>Color</b>")
+        grid_l.addWidget(color, 0, 0)
+        map_meaning = QLabel()
+        map_meaning.setText("<b>Map Meaning</b>")
+        grid_l.addWidget(map_meaning, 0, 1)
+        meaning_rover = QLabel()
+        meaning_rover.setText("<b>Rover Behavior</b>")
+        grid_l.addWidget(meaning_rover, 0, 2)
+
+        # rover - auto
+        rover_auto = LegendButton(self, ROVER_AUTO)
+        grid_l.addWidget(rover_auto, 1, 0)
+        rover_auto_meaning = QLabel()
+        grid_l.addWidget(rover_auto_meaning, 1, 1)
+        rover_auto_meaning.setText("The rover is currently\n in autodrive")
+        rover_auto_meaning_behavior = QLabel()
+        rover_auto_meaning_behavior.setText("The rover is \ncurrently idle")
+        grid_l.addWidget(rover_auto_meaning_behavior, 1, 2)
+
+        # rover - manual
+        rover_manual = LegendButton(self, ROVER_MAN)
+        grid_l.addWidget(rover_manual, 2, 0)
+        rover_manual_meaning = QLabel()
+        grid_l.addWidget(rover_manual_meaning, 2, 1)
+        rover_manual_meaning.setText("The rover is currently\n in manual")
+        rover_manual_meaning_behavior = QLabel()
+        rover_manual_meaning_behavior.setText("The user turned\n the lights on")
+        grid_l.addWidget(rover_manual_meaning_behavior, 2, 2)
+
+        # rover - simulation
+        rover_sim = LegendButton(self, ROVER_SIM)
+        grid_l.addWidget(rover_sim, 3, 0)
+        rover_sim_meaning = QLabel()
+        grid_l.addWidget(rover_sim_meaning, 3, 1)
+        rover_sim_meaning.setText("The rover is in\n simulation mode")
+        rover_sim_meaning_behavior = QLabel()
+        rover_sim_meaning_behavior.setText("The rover has\"lost\" \nnetwork connection.")
+        grid_l.addWidget(rover_sim_meaning_behavior, 3, 2)
+
+        # Obstacle
+        obstacle = LegendButton(self, OBSTACLE)
+        grid_l.addWidget(obstacle, 4, 0)
+        obstacle_meaning = QLabel()
+        grid_l.addWidget(obstacle_meaning, 4, 1)
+        obstacle_meaning.setText("An obstacle")
+
+        # Border
+        border = LegendButton(self, BORDER_SPACE)
+        grid_l.addWidget(border, 5, 0)
+        border_meaning = QLabel()
+        grid_l.addWidget(border_meaning, 5, 1)
+        border_meaning.setText("An open area\n that borders an obstacle \nprovide space to navigate.")
+
+        # Destination
+        destination = LegendButton(self, DESTINATION)
+        grid_l.addWidget(destination, 6, 0)
+        destination_meaning = QLabel()
+        grid_l.addWidget(destination_meaning, 6, 1)
+        destination_meaning.setText("A destination")
+        destination_meaning_behavior = QLabel()
+        destination_meaning_behavior.setText("The rover is moving\n to a destination")
+        grid_l.addWidget(destination_meaning_behavior, 6, 2)
+
+        # Queued Destination
+        destination_f = LegendButton(self, FUTURE_DESTINATION)
+        grid_l.addWidget(destination_f, 7, 0)
+        destination_f_meaning = QLabel()
+        grid_l.addWidget(destination_f_meaning, 7, 1)
+        destination_f_meaning.setText("A queued festination")
+
+        # home
+        home = LegendButton(self, HOME)
+        grid_l.addWidget(home, 8, 0)
+        home_meaning = QLabel()
+        grid_l.addWidget(home_meaning, 8, 1)
+        home_meaning.setText("The rover's home")
+        home_meaning_behavior = QLabel()
+        home_meaning_behavior.setText("The rover is moving\n home")
+        grid_l.addWidget(home_meaning_behavior, 8, 2)
+
+        # path
+        path = LegendButton(self, PATH)
+        grid_l.addWidget(path, 9, 0)
+        path_meaning = QLabel()
+        grid_l.addWidget(path_meaning, 9, 1)
+        path_meaning.setText("The rover's path")
+
+        # simple_path
+        simple_path = LegendButton(self, SIMPLE_PATH)
+        grid_l.addWidget(simple_path, 10, 0)
+        simple_path_meaning = QLabel()
+        grid_l.addWidget(simple_path_meaning, 10, 1)
+        simple_path_meaning.setText("The optimized points\n on the path")
+
+        self.legend.setLayout(grid_l)
+        self.legend.setFixedSize(300, 350)
+        self.legend.move(990, 250)
+
+        # set up rover status panel
+        self.rover_status_panel.setTitle("Robot Status")
+        grid_r = QVBoxLayout(self.rover_status_panel)
+        self.rover_pos_label = QLabel()
+        self.rover_pos_label.setText("Rover Coordinates: ")
+        self.rover_coord_label = QLabel()
+        self.rover_coord_label.setText("Map Position: ")
+        self.rover_status_label = QLabel()
+        self.rover_status_label.setText("Mode: ")
+        grid_r.addWidget(self.rover_pos_label)
+        grid_r.addWidget(self.rover_coord_label)
+        grid_r.addWidget(self.rover_status_label)
+        self.rover_status_panel.setFixedSize(300, 100)
+        self.rover_status_panel.move(990, 150)
 
         # set up for simulation modes
         self.simulate_panel.setTitle("Simulation Mode")
-        self.simulate_panel.setFixedSize(200, 125)
+        self.simulate_panel.setFixedSize(300, 125)
         self.simulate_panel.move(990, 15)
 
         # layout for simulation
@@ -169,17 +287,17 @@ class App(QMainWindow):
 
         # Go back
         self.sim_back_button = QRadioButton(self)
-        self.sim_back_button.setText("Wait")
+        self.sim_back_button.setText("Go To Previous Points")
         self.sim_back_button.toggled.connect(lambda: sim_state(self.sim_back_button))
 
         # Continue
         self.sim_cont_button = QRadioButton(self)
-        self.sim_cont_button.setText("Continue")
+        self.sim_cont_button.setText("Continue With Waypoints")
         self.sim_cont_button.toggled.connect(lambda: sim_state(self.sim_cont_button))
 
         # Continue
         self.sim_home_button = QRadioButton(self)
-        self.sim_home_button.setText("Home")
+        self.sim_home_button.setText("Go Home")
         self.sim_home_button.toggled.connect(lambda: sim_state(self.sim_home_button))
 
         # simulate network disconnect button
@@ -352,24 +470,40 @@ class App(QMainWindow):
         return self.MOUSE_MODE
 
     def on_sim_start(self):
-        if self.sim_button.text() == "Start Simulation":
-            self.send_queue.put("SIM " + str(SIM_MODE))
-            self.send_queue.put("MODE 1")
-            self.sim_button.setText("Stop Simulation")
-            self.start_stop_button.hide()
-            self.autodrive_button.hide()
-            self.video.hide()
-            self.mode = SIM
-        else:
-            self.send_queue.put("MODE 0")
-            self.sim_button.setText("Start Simulation")
-            self.autodrive_button.show()
-            self.video.show()
-            if not self.client.remote_on:
-                self.start_stop_button.show()
-                self.mode = AUTO
+        try:
+            if self.sim_button.text() == "Start Simulation":
+                self.send_queue.put("SIM " + str(SIM_MODE))
+                self.send_queue.put("MODE 1")
+                self.sim_button.setText("Stop Simulation")
+                self.start_stop_button.hide()
+                self.autodrive_button.hide()
+                self.video.hide()
+                self.go_home_button.hide()
+                self.mode = SIM
             else:
-                self.mode = MANUAL
+
+                self.sim_button.setText("Start Simulation")
+                self.autodrive_button.show()
+                self.video.show()
+                self.go_home_button.show()
+                print(self.client.remote_on)
+                print(self.in_motion)
+                if not self.client.remote_on:
+                    self.send_queue.put("MODE 0")
+                    self.start_stop_button.show()
+                    self.mode = AUTO
+                    #if self.in_motion:
+                        #self.send_queue.put("GO")
+                        #self.start_stop_button.setText("Stop")
+                    #else:
+                        #self.send_queue.put("S")
+                else:
+                    self.send_queue.put("S")
+                    self.mode = MANUAL
+                    self.send_queue.put("MODE 2")
+            self.grid_panel.redraw_grid()
+        except:
+            print(traceback.format_exc())
 
     # when all the obstacles need to be cleared
     def on_clear_obstacles(self):
@@ -407,27 +541,49 @@ class App(QMainWindow):
     # noinspection PyArgumentList
     @pyqtSlot(Vector, int)
     def on_node_changed(self, node, node_type):
-        self.grid.set_node(node.x, node.y, node_type)
-        print(node.x, node.y, node_type)
-        self.grid_panel.redraw_grid()
-        if node_type == 1:
-            self.validate_destinations(self.grid.get_node(node.x, node.y))
+        try:
+            self.grid.set_node(node.x, node.y, node_type)
+            print(node.x, node.y, node_type)
+            self.grid_panel.redraw_grid()
+            if node_type == 1:
+                self.validate_destinations(self.grid.get_node(node.x, node.y))
+        except:
+            print(traceback.format_exc())
 
     # when the destinations have changed server side
     # noinspection PyArgumentList
     @pyqtSlot(list)
     def on_destinations_updated(self, positions):
-        self.destinations = positions
-        self.grid_panel.redraw_grid()
+        try:
+            if len(self.destinations) > 0:
+                for d in self.destinations:
+                    self.remove_destination(d)
+
+            self.destinations = []
+            for pos in positions:
+                self.on_destination_added(self.grid.get_node(pos.x, pos.y))
+            self.grid_panel.redraw_grid()
+        except:
+            print(traceback.format_exc())
 
     # noinspection PyArgumentList
     @pyqtSlot(Vector)
     def on_actual_position_updated(self, position):
         self.rover_actual_position = position
-        # TODO add label that displays this information.
+        self.rover_pos_label.setText("Rover Coordinates: " + str(position))
 
+    # noinspection PyArgumentList
+    @pyqtSlot(int)
     def on_rover_status_update(self, status):
         self.rover_status = status
+        if status == 0:
+            temp = "Idle"
+        elif status == 1:
+            temp = "Traveling to point"
+        else:
+            temp = "Going Home"
+
+        self.rover_status_label.setText("Mode: " + temp)
 
     # factory for button click events.
     def on_click_event(self, vector):
@@ -472,21 +628,25 @@ class App(QMainWindow):
         return False
 
     def validate_destinations(self, node):
-        border = self.grid.all_borders
-        # IF there is a destination in play and it is hit by the border, it needs to be cleared.
-        if len(self.destinations) > 0:
-            if border.__contains__(self.destinations[0]) or node == self.destinations[0]:
-                self.destinations.pop(0)
+        try:
 
-                if len(self.destinations) > 0:
-                    self.send_queue.put(
-                        "D " + str(self.destinations[0].gridPos.x) + " " + str(self.destinations[0].gridPos.y))
-                else:
-                    self.current_path = []
-                    self.simple_path = []
-                    self.send_queue.put("D -1 -1")
+            border = self.grid.all_borders
+            # IF there is a destination in play and it is hit by the border, it needs to be cleared.
+            if len(self.destinations) > 0:
+                if border.__contains__(self.destinations[0]) or node == self.destinations[0]:
+                    self.destinations.pop(0)
 
-                self.send_queue.put("N " + str(node.gridPos.x) + " " + str(node.gridPos.y) + " " + str(1))
+                    if len(self.destinations) > 0:
+                        self.send_queue.put(
+                            "D " + str(self.destinations[0].gridPos.x) + " " + str(self.destinations[0].gridPos.y))
+                    else:
+                        self.current_path = []
+                        self.simple_path = []
+                        self.send_queue.put("D -1 -1")
+
+                    self.send_queue.put("N " + str(node.gridPos.x) + " " + str(node.gridPos.y) + " " + str(1))
+        except:
+            print(traceback.format_exc())
 
     # if an obstacle was removed from the map we need to recalculate our path and borders.
     def on_obstacle_removed(self, node):
@@ -582,6 +742,7 @@ class App(QMainWindow):
             self.start_stop_button.show()
             self.send_queue.put("MODE 0")
             self.mode = AUTO
+        self.grid_panel.redraw_grid()
 
     # When the user tells the robot to go home.  drop everything and go home.
     # noinspection PyArgumentList
@@ -593,36 +754,36 @@ class App(QMainWindow):
             self.destinations.append(self.home)
             node = self.home
             self.send_queue.put("D " + str(node.gridPos.x) + " " + str(node.gridPos.y))
-            self.send_queue.put("GO")
             # if we aren't in automatic and going, we need to be.
             auto_button = self.autodrive_button
             if auto_button.text() == "Switch To Automatic":
                 self.on_autodrive_clicked()
             if not self.in_motion:
                 self.on_start_stop_clicked()
+            self.send_queue.put("GO")
             self.grid_panel.redraw_grid()
 
     # this is a callback to signify that we have made it to a destination.
     # noinspection PyArgumentList
     @pyqtSlot()
     def on_point_reached(self):
-        print(self.destinations)
-        print("point reached - received from server")
-        # if we are at our final destination, we are done.
-        if len(self.destinations) > 0 and self.rover_position == self.destinations[0]:
-            if len(self.destinations) > 0:
-                self.destinations.pop(0)
+        try:
+            print("point reached - received from server")
+            # if we are at our final destination, we are done.
+            if len(self.destinations) > 0 and self.rover_position == self.destinations[0]:
+                if len(self.destinations) > 0:
+                    self.destinations.pop(0)
 
-            if len(self.destinations) > 0:
-                print("Destination reached, going to next destination")
-                #self.send_queue.put(
-                    #"D " + str(self.destinations[0].gridPos.x) + " " + str(self.destinations[0].gridPos.y))
-                #self.send_queue.put("GO")
-            else:
-                print("final destination reached")
-                self.send_queue.put("S")
-                if self.in_motion:
-                    self.toggle_in_motion()
+                if len(self.destinations) > 0:
+                    print("Destination reached, going to next destination")
+
+                else:
+                    print("final destination reached")
+                    self.send_queue.put("S")
+                    if self.in_motion:
+                        self.toggle_in_motion()
+        except:
+            print(traceback.format_exc())
 
     # a callback for when the rover's new position is sent.
     # noinspection PyArgumentList
@@ -635,6 +796,7 @@ class App(QMainWindow):
             print("rover position changed - Received from server")
             self.rover_position = node
 
+        self.rover_coord_label.setText("Map Position: " + str(node.gridPos))
         self.grid_panel.redraw_grid()
 
     # opens a save dialog for the grid.
@@ -767,6 +929,27 @@ class GridButton(QPushButton):
             self.default_color = BORDER_SPACE
         self.current_color = self.default_color
         self.set_color(self.current_color)
+
+    # this allows us to change the color
+    def set_color(self, color):
+        p = self.palette()
+        p.setColor(self.backgroundRole(), color)
+        self.setPalette(p)
+        self.current_color = color
+
+
+class LegendButton(QPushButton):
+
+    # init button
+    def __init__(self, parent, color):
+        super().__init__(parent)
+
+        # set default values.
+        self.current_color = OPEN_SPACE
+        self.setFlat(True)
+        self.setAutoFillBackground(True)
+        self.set_color(color)
+        self.resize(10, 10)
 
     # this allows us to change the color
     def set_color(self, color):

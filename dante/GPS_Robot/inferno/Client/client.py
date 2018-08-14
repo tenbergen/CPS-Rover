@@ -64,7 +64,8 @@ class Client(QThread):
             if r:
                 # parse the data
                 data = self.socket.recv(1024).decode('utf-8').split()
-                print(data)
+                if data[0] != 'RT':
+                    print(data)
                 self.parse_data(data)
 
             # send data over the connection
@@ -185,13 +186,18 @@ class Client(QThread):
                 self.on_destination_reached.emit()
 
             elif command == 'DU':
-                destinations = []
-                e = data.pop(0)
-                while e != 'D':
-                    x = int(e)
-                    y = int(data.pop(0))
-                    position = Vector(x, y)
-                    destinations.append(position)
+                try:
+                    destinations = []
+                    e = data.pop(0)
+                    while e != 'UD':
+                        x = int(e)
+                        y = int(data.pop(0))
+                        position = Vector(x, y)
+                        destinations.append(position)
+                        e = data.pop(0)
+                except:
+                    print(traceback.format_exc())
+                #if len(destinations) > 0:
                 self.on_destination_update.emit(destinations)
 
             # N  - node information
