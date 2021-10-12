@@ -1,6 +1,6 @@
 heapqueue==0.1b4
 PyQt5==5.10.1
-opencv-python==3.4.2.17
+opencv-python==4.2.0.32
 pygame==1.9.4
 sip==4.19.8
 wheel==0.31.1
